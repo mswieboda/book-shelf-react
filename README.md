@@ -2,9 +2,9 @@
 
 Vite + React 19 + TypeScript + Tailwind v4: an interview-prep sandbox.
 
-**Start here → [CHALLENGE.md](CHALLENGE.md)** (build "Shelf", a reading-list app, milestone by milestone)
+**Start here → [CHALLENGE.md](CHALLENGE.md)** (build "Shelf", a reading-list app, milestone by milestone, with axios and a hand-built data layer)
 
-- [docs/PRIMER.md](docs/PRIMER.md): modern React architecture cheat sheet (state kinds, data fetching, TanStack Query, Context vs Zustand, React 19)
+- [docs/PRIMER.md](docs/PRIMER.md): modern React architecture cheat sheet (state kinds, API layering, axios vs fetch, caching concepts, Context vs Zustand vs Redux, React 18/19)
 - [docs/API.md](docs/API.md): the backend contract (mocked with MSW for now) + Open Library
 
 ## Scripts
@@ -16,4 +16,4 @@ Vite + React 19 + TypeScript + Tailwind v4: an interview-prep sandbox.
 
 ## The fake backend
 
-`src/mocks/` is a pretend server built with [MSW](https://mswjs.io). In dev, a service worker answers `/api/*` requests; every other request (e.g. Open Library) goes to the real network. App code should never import from `src/mocks/`; talk to it with `fetch`, the same way you'll talk to the real Node backend later.
+`src/mocks/` is a pretend server built with [MSW](https://mswjs.io). In dev, a service worker answers `/api/*` requests; every other request (e.g. Open Library) goes to the real network. App code should never import from `src/mocks/`; talk to it over HTTP with axios, the same way you'll talk to the real Node backend later.

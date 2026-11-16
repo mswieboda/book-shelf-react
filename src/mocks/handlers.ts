@@ -1,7 +1,7 @@
 /**
  * The fake REST API. See docs/API.md for the contract.
  *
- * MSW intercepts fetch() at the network level (a Service Worker in the browser,
+ * MSW intercepts HTTP (fetch and XHR, so axios too) at the network level (a Service Worker in the browser,
  * a request interceptor in Node/tests), so your app code makes real HTTP calls
  * and has no idea it's talking to a mock. When we build the Node backend later,
  * it implements this same contract and these handlers simply get switched off.

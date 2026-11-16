@@ -5,7 +5,7 @@ Two data sources:
 1. **Your backend**: `/api/*`. For now it's faked in the browser by [MSW](https://mswjs.io) (`src/mocks/`). Later, a Node server will implement this exact contract and the app code won't change.
 2. **An external API**: [Open Library](https://openlibrary.org/developers/api). It's real, public, needs no key, and allows CORS.
 
-> **Rule:** app code never imports from `src/mocks/`. Treat it as a server on another machine. The only way in is `fetch('/api/...')`.
+> **Rule:** app code never imports from `src/mocks/`. Treat it as a server on another machine. The only way in is HTTP, via your axios instance (`baseURL: '/api'`).
 
 ---
 
@@ -49,7 +49,14 @@ interface ApiErrorBody { error: string }
 | `DELETE` | `/api/shelf/:id` | none | `204` empty body | `404` |
 | `POST` | `/api/_reset` | none | `200 ShelfBook[]` | dev helper: restores the seed data |
 
-Remember to send `Content-Type: application/json` and `JSON.stringify` the body on POST and PATCH.
+With axios, pass a plain object as the body (`http.post('/shelf', input)`). It sets `Content-Type: application/json` and serializes for you. Any non-2xx response rejects, with the `{ error }` body in `err.response.data`.
+
+```ts
+const http = axios.create({ baseURL: '/api' })
+await http.get<ShelfBook[]>('/shelf', { params: { status: 'reading' } }) // GET /api/shelf?status=reading
+await http.patch<ShelfBook>(`/shelf/${id}`, { status: 'done', rating: 5 })
+await http.delete(`/shelf/${id}`)                                          // 204: response.data is empty
+```
 
 ### Simulating a real network
 
@@ -72,7 +79,17 @@ await fetch('/api/_reset', { method: 'POST' }) // restore seed data
 GET https://openlibrary.org/search.json?q=dune&fields=key,title,author_name,first_publish_year,cover_i&limit=20
 ```
 
-Pass `fields` so the response stays small (the default response is huge). Response, trimmed:
+Pass `fields` so the response stays small (the default response is huge). With axios, give Open Library its own instance:
+
+```ts
+const openLibrary = axios.create({ baseURL: 'https://openlibrary.org', timeout: 10_000 })
+await openLibrary.get<OpenLibrarySearchResponse>('/search.json', {
+  params: { q: 'dune', fields: 'key,title,author_name,first_publish_year,cover_i', limit: 20 },
+  signal,
+})
+```
+
+Response, trimmed:
 
 ```json
 {
@@ -92,7 +109,7 @@ Pass `fields` so the response stays small (the default response is huge). Respon
 Any field except `key` and `title` can be missing. Your types should say so.
 
 Notes:
-- Open Library is a free service and is sometimes slow (1–3s), which makes it good practice for loading states. Don't send a request on every keystroke (see Milestone 3).
+- Open Library is a free service and is sometimes slow (1–3s), which makes it good practice for loading states. Don't send a request on every keystroke (see Milestone 4).
 - Don't pass Open Library's response shape around your app. Map it into your own type at the edge, e.g. `author_name` → `authors`, `cover_i` → `coverId`, `key` → `workKey`. Then a change in their API breaks one function instead of twenty components.
 
 ### Covers

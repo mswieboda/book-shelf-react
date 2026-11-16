@@ -3,7 +3,7 @@
  * so your shelf survives page reloads.
  *
  * App code should NEVER import from src/mocks/. Pretend this lives on a server.
- * The only way to reach it is over HTTP: fetch('/api/...').
+ * The only way to reach it is over HTTP (your axios instance, baseURL /api).
  */
 
 export type ReadingStatus = 'want' | 'reading' | 'done'

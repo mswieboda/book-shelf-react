@@ -25,10 +25,12 @@ The domain is small on purpose, so your attention goes to the **React fundamenta
 └──────────────────────────────────────────────────────────┘
 ```
 
+**The approach:** you talk to the backend with **axios**, through an API layer you design, and you **build your own small data layer** (a cache, shared in-flight requests, invalidation, optimistic updates) instead of using a data-fetching library. That way, when an interviewer asks "how would you avoid fetching the same data twice?" or "how do you keep a list fresh after a create?", you can answer from having built it. Libraries like TanStack Query (React Query), SWR and RTK Query do the same jobs, and you'll compare against one at the end.
+
 **What's provided:**
 - Vite + React 19 + TypeScript + Tailwind v4 (already set up)
-- A **fake backend** (MSW) that answers `fetch('/api/shelf')` like a real server, with latency, validation errors, and switchable random failures. See [`docs/API.md`](docs/API.md).
-- [`docs/PRIMER.md`](docs/PRIMER.md): the architecture cheat sheet. Read sections 1–2 before you start.
+- A **fake backend** (MSW) that answers HTTP requests to `/api/*` like a real server, with latency, validation errors, and switchable random failures. See [`docs/API.md`](docs/API.md).
+- [`docs/PRIMER.md`](docs/PRIMER.md): the architecture cheat sheet. Read sections 1–3 before you start.
 
 **What's not provided:** any app code. That's your job.
 
@@ -36,23 +38,24 @@ The domain is small on purpose, so your attention goes to the **React fundamenta
 
 ## Ground rules
 
-1. **Don't import from `src/mocks/`** in app code. It's "the server", reachable only through `fetch`.
-2. **One milestone at a time**, with a git commit at the end of each (`git commit -m "M2: fetch shelf with useEffect"`). Then you can diff milestones and see how much code TanStack Query deleted.
-3. **Talk out loud / write it down first.** Before each milestone, sketch the component tree and decide *where each piece of state lives*. That's the part interviews grade.
-4. **Hints are folded.** Try for 10–15 minutes before opening one.
-5. **Stuck or done? Ask Claude to review**, not to solve: "review my M4, don't give me the answer, just point at problems."
-6. Styling is not the point. Use plain Tailwind utilities and move on.
+1. **Don't import from `src/mocks/`** in app code. It's "the server", reachable only over HTTP.
+2. **Components never import axios.** They call hooks, hooks call API functions, and API functions use your axios instance. (Why: [primer, section 2](docs/PRIMER.md#2-getting-data-from-a-server-the-layers).)
+3. **One milestone at a time**, with a git commit at the end of each (`git commit -m "M3: fetch shelf with useEffect"`). Then you can diff milestones and see your architecture evolve.
+4. **Talk out loud / write it down first.** Before each milestone, sketch the component tree and decide *where each piece of state lives*. That's the part interviews grade.
+5. **Hints are folded.** Try for 10–15 minutes before opening one.
+6. **Stuck or done? Ask Claude to review**, not to solve: "review my M5, don't give me the answer, just point at problems."
+7. Styling is not the point. Use plain Tailwind utilities and move on.
 
-**Pacing:** Milestones 0–6 are the core (about a weekend). 7–9 level you up. Each has a rough time box. If you blow through it, stop, look at the hints, and keep moving.
+**Pacing:** Milestones 0–7 are the core (about a weekend; M5 and M6 are the meatiest). 8–10 level you up. Each has a rough time box. If you blow through it, stop, look at the hints, and keep moving.
 
 ---
 
 ## Milestone 0: Orientation (15 min)
 
 - [ ] `npm run dev`, open the app, open DevTools.
-- [ ] In the console, run `await (await fetch('/api/shelf')).json()`. You should get 4 seeded books. Check the Network tab: the request is answered by the mock service worker.
+- [ ] In the console, run `await (await fetch('/api/shelf')).json()`. You should get 4 seeded books. Check the Network tab: the request is answered by the mock service worker. (Plain `fetch` is fine for poking around in the console. The app will use axios.)
 - [ ] Open `https://openlibrary.org/search.json?q=hobbit&fields=key,title,author_name,first_publish_year,cover_i&limit=5` in a tab and get a feel for the response.
-- [ ] Read [`docs/PRIMER.md`](docs/PRIMER.md) sections 1–2.
+- [ ] Read [`docs/PRIMER.md`](docs/PRIMER.md) sections 1–3.
 - [ ] On paper: draw the component tree for the two screens above, and label every piece of state with its kind (server / URL / local / shared client / form). Keep the paper; you'll check it against the final app.
 
 ---
@@ -84,20 +87,62 @@ Build the **shelf screen** using a hardcoded array (copy 3–4 books from `/api/
 
 ---
 
-## Milestone 2: Fetching the hard way with `useEffect` (45 min)
+## Milestone 2: The HTTP client & API layer (45 min)
 
-Replace the fixtures with real data from `GET /api/shelf`. You're deliberately doing this *without* a library, to understand what libraries do for you.
+`npm i axios`
 
-- [ ] `src/lib/apiClient.ts`: an `apiFetch<T>(path, init?)` wrapper. It parses JSON, **throws an `ApiError`** (with `status` and `message` from `{ error }`) on non-2xx responses, and handles `204`.
-- [ ] `src/features/shelf/api.ts`: `getShelf(status?, { signal }?)`.
-- [ ] A custom hook `useShelf(status)` that returns `{ data, error, isLoading, refetch }`, built from `useState` + `useEffect`.
-- [ ] Filter **on the server** now: pass `?status=` when a tab is selected, refetching when it changes.
-- [ ] Handle **race conditions** with `AbortController` in the effect cleanup.
+No UI changes yet. You're building the plumbing every later milestone sits on. An interviewer asking you to "design the API layer" wants to see this.
+
+- [ ] `src/lib/http.ts`: an axios **instance** for your backend, `axios.create({ baseURL: '/api', timeout: 10_000 })`.
+- [ ] A **response interceptor** that turns every failure into your own `ApiError` class (`status`, `message`, and `code`, e.g. `'TIMEOUT' | 'NETWORK' | 'CANCELED' | 'HTTP'`). Pull the message out of the server's `{ error: string }` body when there is one. After this, nothing outside `lib/` needs to know what an `AxiosError` looks like.
+- [ ] A **request interceptor** that does something real: in dev, log `→ GET /shelf` and time each request (stash the start time on the config), or attach an `Authorization: Bearer demo-token` header as you would for a real auth token. (The mock backend ignores it, but you can see it in the Network tab.)
+- [ ] `src/features/shelf/api.ts`: typed functions `getShelf(status?, opts?)`, `getBook(id)`, `addBook(input)`, `updateBook(id, patch)`, `removeBook(id)`. Each returns **data**, not the axios response (`Promise<ShelfBook[]>`, not `Promise<AxiosResponse<…>>`). Each accepts an optional `{ signal }` for cancellation.
+- [ ] A **second instance** for Open Library in `src/features/search/api.ts` (`baseURL: 'https://openlibrary.org'`), because different hosts get different config.
+- [ ] Prove it works without UI: temporarily expose it, e.g. `if (import.meta.env.DEV) Object.assign(window, { shelfApi })` in `main.tsx`, then in the console: `await shelfApi.getShelf('reading')`, `await shelfApi.updateBook('bad-id', { status: 'done' }).catch(e => e)` (it should be your `ApiError` with status 404), and `await shelfApi.addBook({ workKey: '/works/OL893414W', title: 'Dune' }).catch(e => e)` (409).
+
+**Concepts:** axios instances, interceptors, error normalization, TypeScript generics (`http.get<ShelfBook[]>(…)`), separation of concerns, cancellation with `AbortSignal`.
+
+<details><summary>Hint: interceptor shape</summary>
+
+```ts
+http.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => Promise.reject(toApiError(error)),
+)
+
+function toApiError(error: unknown): ApiError {
+  if (axios.isCancel(error)) return new ApiError('Request canceled', { code: 'CANCELED' })
+  if (axios.isAxiosError<{ error?: string }>(error)) {
+    if (error.code === 'ECONNABORTED') return new ApiError('Request timed out', { code: 'TIMEOUT' })
+    if (!error.response) return new ApiError('Network error', { code: 'NETWORK' })
+    return new ApiError(error.response.data?.error ?? error.message, {
+      code: 'HTTP',
+      status: error.response.status,
+    })
+  }
+  return new ApiError('Unknown error', { code: 'UNKNOWN' })
+}
+```
+
+Keep the `CANCELED` case distinct: in later milestones a canceled request is expected, not an error to show the user.
+</details>
+
+**Be ready to answer:** What does axios give you over `fetch`, and what would you have to write yourself without it? Name three uses for interceptors. Why wrap axios errors instead of letting components check `error.response.status`?
+
+---
+
+## Milestone 3: Fetching in components with `useEffect` (45 min)
+
+Replace the fixtures with real data via your API layer.
+
+- [ ] A custom hook `useShelf(status)` returning `{ data, error, isLoading, refetch }`, built from `useState` + `useEffect`.
+- [ ] Filter **on the server**: pass `?status=` when a tab is selected, refetching when it changes. (`http.get('/shelf', { params: { status } })`; axios drops `undefined` params for you.)
+- [ ] Handle **race conditions** with an `AbortController` in the effect cleanup, and ignore your `CANCELED` errors.
 - [ ] Loading state, error state with a **Retry** button, empty state.
 - [ ] Test it: in the console, `localStorage.setItem('mock:latency','2000')` and `localStorage.setItem('mock:failRate','0.3')`, then reload. Click through tabs quickly. Make sure the screen never shows the wrong tab's data.
 - [ ] Status changes and removes still only update local state for now. That's fine.
 
-**Concepts:** the effect lifecycle and dependency array, cleanup, StrictMode double-invoke, `AbortController`, separating the API layer from components, custom hooks.
+**Concepts:** the effect lifecycle and dependency array, cleanup, StrictMode double-invoke, `AbortController`, custom hooks.
 
 <details><summary>Hint: the hook skeleton</summary>
 
@@ -105,41 +150,43 @@ Replace the fixtures with real data from `GET /api/shelf`. You're deliberately d
 useEffect(() => {
   const controller = new AbortController()
   setIsLoading(true)
+  setError(null)
   getShelf(status, { signal: controller.signal })
     .then(setData)
-    .catch((e) => { if (e.name !== 'AbortError') setError(e) })
+    .catch((e: ApiError) => { if (e.code !== 'CANCELED') setError(e) })
     .finally(() => { if (!controller.signal.aborted) setIsLoading(false) })
   return () => controller.abort()
-}, [status, /* something that changes when you call refetch() */])
+}, [status, reloadCount])
 ```
 
-For `refetch`, a common trick is a counter in state (`const [nonce, setNonce] = useState(0)`) that you add to the dependency list.
+For `refetch`, a common trick is a counter in state (`const [reloadCount, setReloadCount] = useState(0)`) that's in the dependency list.
 </details>
 
-**Be ready to answer:** Why did the request fire twice on load? What happens without the cleanup if responses arrive out of order? List three things this hook *doesn't* do that you'd want in production.
+**Be ready to answer:** Why did the request fire twice on load (check the Network tab)? What happens without the cleanup if responses arrive out of order? List three things this hook *doesn't* do that you'd want in production.
 
 ---
 
-## Milestone 3: An external API: Search (45 min)
+## Milestone 4: An external API: Search (45 min)
 
-Add a **Search** section. Put it above the shelf, or toggle between them with a `useState`; routing comes in M6.
+Add a **Search** section. Put it above the shelf, or toggle between them with a `useState`; routing comes in M7.
 
-- [ ] `src/features/search/api.ts`: `searchBooks(query, { signal })` calls Open Library and **maps** the response into your own `SearchResult` type (`workKey`, `title`, `authors`, `coverId`, `firstPublishYear`). Nothing outside this file knows about `author_name` or `cover_i`.
+- [ ] `searchBooks(query, { signal })` calls Open Library (`/search.json` with `params: { q, fields, limit }`) and **maps** the response into your own `SearchResult` type (`workKey`, `title`, `authors`, `coverId`, `firstPublishYear`). Nothing outside this file knows about `author_name` or `cover_i`.
 - [ ] A controlled search input.
 - [ ] A generic `useDebouncedValue(value, delayMs)` hook in `src/hooks/`. Search only fires about 400ms after typing stops, and only for 2+ characters.
-- [ ] Same `useEffect` + abort pattern as M2 (copy-paste it; the duplication is part of the lesson).
-- [ ] Each result has **+ Add**, which calls `POST /api/shelf`. Show `409` ("already on your shelf") nicely.
+- [ ] A `useSearch(query)` hook using the same `useEffect` + abort pattern as M3 (copy-paste it; the duplication is part of the lesson).
+- [ ] Each result has **+ Add**, which calls `addBook()`. Show `409` ("already on your shelf") nicely. Disable the button while the request is in flight.
 - [ ] Results already on your shelf show "✓ On shelf" instead of the button.
 
 **Concepts:** debouncing with effect cleanup (`setTimeout` / `clearTimeout`), mapping external data at the boundary, handling a `409`.
 
-At the end of M3, **write down the pain points** you hit. You should find at least these:
-1. Duplicated loading/error/abort boilerplate in two hooks.
+At the end of M4, **write down the pain points** you hit. You should find at least these:
+1. Duplicated loading/error/abort boilerplate in two hooks (and more coming).
 2. To show "✓ On shelf", search needs the shelf data too. Do you fetch it again? Lift it up?
 3. After **+ Add**, the shelf list is stale until you refresh.
 4. Switching tabs back and forth refetches every time, with a spinner, even though nothing changed.
+5. StrictMode fires every request twice in dev.
 
-Milestone 4 fixes all four.
+Milestones 5 and 6 fix all five.
 
 <details><summary>Hint: useDebouncedValue</summary>
 
@@ -155,77 +202,100 @@ return debounced
 
 ---
 
-## Milestone 4: Server state with TanStack Query (1 hr)
+## Milestone 5: Your own data layer: cache, sharing, staleness (1.5 hr)
 
-`npm i @tanstack/react-query @tanstack/react-query-devtools`
+This is the core architecture milestone. You'll build a **small query cache** and one generic hook to replace `useShelf` and `useSearch`. Keep it to about 80–120 lines. The goal is to understand the ideas, not to rebuild React Query. Read [primer, section 4](docs/PRIMER.md#4-what-a-data-layer-does) first.
 
-- [ ] `src/app/providers.tsx`: create a `QueryClient` (outside the component, or in `useState(() => new QueryClient())`), wrap the app in `QueryClientProvider`, and add `<ReactQueryDevtools />`.
-- [ ] A **query key factory** (`shelfKeys`) and `queryOptions()` definitions in `features/shelf/queries.ts`. See the [primer, section 3](docs/PRIMER.md#3-tanstack-query-in-five-minutes).
-- [ ] Replace `useShelf` with `useQuery`. Pass TanStack's `signal` to your API function; the hand-written abort logic goes away.
-- [ ] Search: `useQuery` with `enabled: debouncedQuery.length >= 2` and `placeholderData: keepPreviousData` so old results stay visible while new ones load.
-- [ ] "✓ On shelf": search reads the *same* cached shelf query (`useQuery(shelfQueryOptions())`). Confirm in the Network tab that no duplicate request is made.
-- [ ] **+ Add** becomes a `useMutation`. On success, `invalidateQueries({ queryKey: shelfKeys.all })`. Disable the button while `isPending`.
-- [ ] Set a sensible `staleTime` (say 30s) and watch the devtools: tabs you've already visited now show instantly.
-- [ ] Delete the M2/M3 hand-written hooks. Run `git diff --stat` and enjoy it.
+- [ ] `src/lib/queryCache.ts`: a module-level store.
+  - [ ] Entries keyed by a **query key** (an array like `['shelf', 'list', { status }]`, serialized to a string for the `Map`).
+  - [ ] Each entry holds `data`, `error`, `status`, `fetchedAt`, and the **in-flight promise**.
+  - [ ] `fetch(key, fn, { staleTime })`: return cached data if it's fresh; if a request for this key is already in flight, **return that same promise** (de-duping); otherwise call `fn` and store the result.
+  - [ ] `subscribe(key, listener)` / `getSnapshot(key)` so React can re-render when an entry changes.
+  - [ ] `setData(key, updater)`, `invalidate(keyPrefix)` (marks matching entries stale and refetches the ones on screen), and `clear()` (you'll need it in tests).
+- [ ] `src/hooks/useApiQuery.ts`: `useApiQuery(key, fn, { staleTime?, enabled? })` → `{ data, error, isLoading, isFetching, refetch }`.
+  - `isLoading`: no data yet and a request is running (show a spinner).
+  - `isFetching`: any request is running, including a background refresh while old data is on screen (show a subtle indicator).
+- [ ] Replace `useShelf` and `useSearch` with thin wrappers: `useShelf(status) = useApiQuery(shelfKeys.list(status), () => getShelf(status), { staleTime: 30_000 })`.
+- [ ] A **query key factory** in `features/shelf/queries.ts`: `shelfKeys.all`, `.lists()`, `.list(status)`, `.detail(id)`.
+- [ ] "✓ On shelf" reads the *same* cached shelf query. Confirm in the Network tab that no duplicate request is made, **including under StrictMode**.
+- [ ] After **+ Add** succeeds, call `queryCache.invalidate(shelfKeys.all)`. The shelf updates without a refresh.
+- [ ] Switch tabs back and forth: tabs you've visited show instantly, with no spinner, within `staleTime`.
 
-**Concepts:** server state vs client state, query keys, cache, `staleTime` vs `gcTime`, `isPending` vs `isFetching`, deduping, invalidation, refetch on window focus.
+**Concepts:** caching, query keys, request de-duping, stale-while-revalidate, invalidation, `useSyncExternalStore`, why per-key caching makes the M3 race condition go away.
 
-<details><summary>Hint: filtering. Should status be in the key?</summary>
+<details><summary>Hint: subscribing React to an external store</summary>
 
-There are two valid designs: (a) key per status `['shelf','list',{status}]` with server-side filtering, or (b) one query for the whole shelf with client-side filtering via `select`. (b) makes the tab counts free and makes "On shelf" trivial. (a) scales to huge lists. Pick one and **be able to defend it**. That trade-off is a good interview conversation.
+React's built-in hook for "re-render when this outside thing changes" is `useSyncExternalStore(subscribe, getSnapshot)`. `getSnapshot` must return the **same object reference** when nothing changed, so replace entries immutably (`map.set(k, { ...old, data })`) rather than mutating them, or you get an infinite render loop.
+
+```ts
+const hash = JSON.stringify(key)
+const entry = useSyncExternalStore(
+  (onChange) => queryCache.subscribe(hash, onChange),
+  () => queryCache.getSnapshot(hash),
+)
+```
 </details>
 
-**Be ready to answer:** What exactly happens when you call `invalidateQueries({ queryKey: ['shelf'] })`? Why does the shelf refetch when you alt-tab back to the browser, and how would you turn that off?
+<details><summary>Hint: the key and fn identity trap</summary>
+
+`useApiQuery(['shelf', 'list', { status }], () => getShelf(status))` creates a **new array and a new function every render**. If either goes in an effect's dependency list, it fires every render. Fixes:
+- depend on the **serialized** key (`hash`), not the array (this is why libraries hash keys)
+- read the latest `fn` without depending on it: store it in a ref (`fnRef.current = fn`), or use React 19.2's `useEffectEvent`
+</details>
+
+<details><summary>Hint: invalidating by prefix</summary>
+
+Keep the original key array next to each entry, then match element by element: `['shelf']` matches `['shelf', 'list', {…}]` and `['shelf', 'detail', 'abc']`. Comparing `JSON.stringify(prefix[i]) === JSON.stringify(key[i])` for each `i` is fine here. For entries with active subscribers, refetch immediately. For the rest, just mark them stale so they refetch next time they're used.
+</details>
+
+<details><summary>Hint: what about cancellation?</summary>
+
+Once several components can share one in-flight request, aborting it when *one* of them unmounts would break the others. Keep it simple: don't abort in the cache layer. Since results are stored **per key**, a slow response for `status=want` can no longer overwrite what the `status=reading` tab shows. The race from M3 is gone by design. Be ready to explain that.
+</details>
+
+**Be ready to answer:** "How would you avoid fetching the same data twice?" "How do you keep a list fresh after a create?" What's the difference between stale data and missing data, and what does the user see in each case? Where would this design fall over (memory growth, cache eviction, pagination)?
 
 ---
 
-## Milestone 5: Mutations & optimistic UI (1 hr)
+## Milestone 6: Mutations & optimistic UI (1 hr)
 
-- [ ] Status `<select>` → `PATCH /api/shelf/:id`, implemented as a **cache-based optimistic update**: `onMutate` (cancel queries, snapshot, `setQueryData`, return the snapshot), `onError` (roll back and show an error), `onSettled` (invalidate).
-- [ ] Remove → `DELETE /api/shelf/:id`, implemented the **other way**: no cache surgery. While the mutation is pending, render that card faded or struck through using `isPending` and `variables`, and let `onSuccess` invalidation remove it for real.
-- [ ] Turn on `mock:failRate = 0.5` and hammer both. The UI must always end up matching the server. Click **Reset** if needed: `await fetch('/api/_reset', { method: 'POST' })`.
-- [ ] Wrap these in custom hooks: `useUpdateBook()` and `useRemoveBook()`. Components shouldn't know about query keys.
+- [ ] `src/hooks/useApiMutation.ts`: `useApiMutation(mutationFn, { onMutate?, onSuccess?, onError?, onSettled? })` → `{ mutate, mutateAsync, isPending, error, variables, reset }`. `onMutate` can return a **context** value that gets passed to `onError` (for rollback).
+- [ ] **Status `<select>` → `updateBook()`**, done **optimistically**: in `onMutate`, snapshot the affected cached lists and write the new status into them with `queryCache.setData`, then return the snapshot. In `onError`, restore the snapshot and show an error. In `onSettled`, invalidate.
+- [ ] **Remove → `removeBook()`**, done the **other way**: no cache surgery. While pending, render that card faded or struck through (check `isPending` and `variables`), and let invalidation remove it for real once it succeeds.
+- [ ] Try both refresh strategies and note the trade-off: **invalidate and refetch** vs. **write the server's response into the cache** (`PATCH` returns the updated book).
+- [ ] Turn on `mock:failRate = 0.5` and hammer both. The UI must always end up matching the server. Reset if needed with `await fetch('/api/_reset', { method: 'POST' })`.
+- [ ] Wrap these in feature hooks: `useUpdateBook()`, `useRemoveBook()`, `useAddBook()`. Components shouldn't know about cache keys.
 
-**Concepts:** optimistic vs pessimistic updates, rollback, why you `cancelQueries` first, custom hooks as the boundary between UI and data.
+**Concepts:** optimistic vs pessimistic updates, rollback, mutation lifecycle, hooks as the boundary between UI and data.
 
-<details><summary>Hint: onMutate shape</summary>
+<details><summary>Hint: a refetch can overwrite your optimistic value</summary>
 
-```ts
-onMutate: async ({ id, patch }) => {
-  await queryClient.cancelQueries({ queryKey: shelfKeys.all })
-  const previous = queryClient.getQueriesData<ShelfBook[]>({ queryKey: shelfKeys.lists() })
-  queryClient.setQueriesData<ShelfBook[]>({ queryKey: shelfKeys.lists() }, (old) =>
-    old?.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-  )
-  return { previous }
-},
-onError: (_err, _vars, context) => {
-  context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data))
-},
-onSettled: () => queryClient.invalidateQueries({ queryKey: shelfKeys.all }),
-```
+If a background refetch of the list started *before* your PATCH and finishes *after* your optimistic write, it puts the old status back. Libraries handle this by cancelling in-flight queries in `onMutate`. In your cache, a simple fix is to ignore a fetch result if the entry was `setData`'d after that fetch started (compare timestamps). Or accept the flicker and let `onSettled`'s invalidation correct it. Either way, be able to explain it.
+</details>
 
-(Your exact keys depend on your M4 design. If you filter by status on the server, think about what happens when a book's status changes while you're on the "Reading" tab.)
+<details><summary>Hint: server-side filtering + status changes</summary>
+
+If you're on the "Reading" tab and change a book to "Done", should it vanish from that list optimistically? Which cached lists do you need to update: `list('reading')`, `list('done')`, `list(undefined)`? This is the main argument for fetching the whole shelf once and filtering on the client. Pick one design and **defend it**.
 </details>
 
 **Be ready to answer:** When is optimistic UI a bad idea? (Think payments, irreversible actions, and actions that usually fail.)
 
 ---
 
-## Milestone 6: Routing & URL state (1 hr)
+## Milestone 7: Routing & URL state (1 hr)
 
 `npm i react-router`
 
 - [ ] Routes: `/` → redirect to `/shelf`; `/shelf`; `/shelf/:id`; `/search`; `*` → Not Found.
 - [ ] A **layout route** with the header and nav (`NavLink` with active styling) and an `<Outlet />`.
 - [ ] Move UI state into the URL with `useSearchParams`: the shelf filter and sort become `/shelf?status=reading&sort=title`, and the search query becomes `/search?q=hobbit`. Refresh, back/forward, and copying the link should all work.
-- [ ] **Detail page** `/shelf/:id`: `useParams` + a detail query. Show a 404 state for unknown ids.
+- [ ] **Detail page** `/shelf/:id`: `useParams` + a `useBook(id)` query. Show a proper "not found" state for a 404 (your `ApiError.status` makes this easy).
 - [ ] On the detail page, a **notes + rating form** using a React 19 **form action** + `useActionState`. Show server validation errors (try saving more than 1000 characters of notes). Make a `SubmitButton` that uses `useFormStatus()` for its pending state.
-- [ ] Bonus: make the detail page show instantly when you come from the list, using the list cache as `placeholderData` for the detail query.
+- [ ] Bonus: make the detail page show instantly when you come from the list, by seeding it from the list cache. (Should your `useApiQuery` take an `initialData` option?)
 
 **Concepts:** URL as the source of truth, layout/nested routes, params vs search params, uncontrolled forms with `FormData`, `useActionState`, `useFormStatus`.
 
-<details><summary>Hint: useActionState + a mutation</summary>
+<details><summary>Hint: useActionState + your mutation</summary>
 
 ```tsx
 const update = useUpdateBook()
@@ -235,7 +305,7 @@ const [state, formAction, isPending] = useActionState(
       await update.mutateAsync({ id, patch: { notes: String(formData.get('notes')), /* rating */ } })
       return null
     } catch (e) {
-      return { error: e instanceof Error ? e.message : 'Something went wrong' }
+      return { error: e instanceof ApiError ? e.message : 'Something went wrong' }
     }
   },
   null,
@@ -243,77 +313,89 @@ const [state, formAction, isPending] = useActionState(
 // <form action={formAction}> <textarea name="notes" defaultValue={book.notes} /> …
 ```
 
-Gotcha: React **resets uncontrolled fields** after a successful action. Make sure `defaultValue` already reflects the saved data by then (e.g. `setQueryData` in the mutation's `onSuccess`), or the textarea flashes back to the old text.
+Gotcha: React **resets uncontrolled fields** after a successful action. Make sure `defaultValue` already reflects the saved data by then (write the PATCH response into the cache in `onSuccess`), or the textarea flashes back to the old text.
 </details>
 
 **Be ready to answer:** What belongs in the URL and what doesn't? Controlled vs uncontrolled: why did you pick uncontrolled for the notes form? Would a live character counter change that?
 
 ---
 
-## Milestone 7: Client state: Context vs Zustand (45 min)
+## Milestone 8: Client state: Context vs Zustand (45 min)
 
 There's finally some **client-only shared state**, so it's time to choose the right tool for it.
 
 - [ ] **Theme (Context):** `ThemeProvider` + `useTheme()` with `'light' | 'dark' | 'system'`, persisted to `localStorage`, plus a toggle in the header. `useTheme()` should throw a helpful error if it's used outside the provider. (Tailwind v4 dark mode by class: add `@custom-variant dark (&:where(.dark, .dark *));` to `index.css` and toggle `.dark` on `<html>`.)
 - [ ] **Shelf UI store (Zustand):** `npm i zustand`. Add a `view: 'grid' | 'list'` preference (persisted with the `persist` middleware) and **multi-select** (`selectedIds`) with a floating "N selected: Mark done · Remove" bar in the layout. Components read slices with **selectors**.
-- [ ] The store holds **ids only**, never copies of book objects. Book data stays in the query cache.
+- [ ] The store holds **ids only**, never copies of book objects. Book data stays in your query cache.
 - [ ] Clear the selection when the filter changes or after a bulk action.
 
 **Concepts:** when Context is enough, Context re-render behaviour, selectors, persisted state, not duplicating server state.
 
 <details><summary>Hint: why not put theme in Zustand too?</summary>
 
-You could, and it would be fine. Context is taught here because interviews *always* ask about it, and theme is the textbook case: it changes rarely, everyone reads it, and it suits dependency injection. Be ready to say why you'd pick one over the other ([primer, section 4](docs/PRIMER.md#4-client-state-usestate--context--zustand)).
+You could, and it would be fine. Context is taught here because interviews *always* ask about it, and theme is the textbook case: it changes rarely, everyone reads it, and it suits dependency injection. Be ready to say why you'd pick one over the other ([primer, section 5](docs/PRIMER.md#5-client-state-usestate--context--zustand--redux)).
 </details>
 
-**Be ready to answer:** Why does every consumer of a Context re-render on change, and what are the mitigations? (Split contexts, memoize the value, or move to a selector-based store.)
+<details><summary>Hint: you've already built a store</summary>
+
+Your M5 `queryCache` with `subscribe` + `useSyncExternalStore` is essentially how Zustand works internally. Zustand adds selectors and a nicer API. Being able to say that in an interview is a nice touch.
+</details>
+
+**Be ready to answer:** Why does every consumer of a Context re-render on change, and what are the mitigations? (Split contexts, memoize the value, or move to a selector-based store.) When would you reach for Redux Toolkit instead?
 
 ---
 
-## Milestone 8: Resilience: Suspense & error boundaries (45 min)
+## Milestone 9: Resilience: error boundaries & code splitting (45 min)
 
 `npm i react-error-boundary`
 
-- [ ] Convert the detail page to `useSuspenseQuery` with a `<Suspense fallback={<BookDetailSkeleton/>}>`. Note how the component no longer handles `isPending`.
-- [ ] Add an `ErrorBoundary` around the routed content (inside the layout, so the nav survives a crash) with a "Try again" button. Use `resetKeys={[location.pathname]}` so navigating away clears the error, and `QueryErrorResetBoundary` so "Try again" refetches.
+- [ ] Add an `ErrorBoundary` around the routed content (inside the layout, so the nav survives a crash) with a "Try again" button. Use `resetKeys={[location.pathname]}` so navigating away clears the error.
 - [ ] Throw a deliberate error in a component to prove the boundary works, then remove it.
-- [ ] Lazy-load the search route with `React.lazy` + `Suspense` and check the Network tab for the separate chunk.
+- [ ] Error boundaries don't catch errors from async code. Add a `throwOnError` option to `useApiQuery` that **rethrows the error during render** so the boundary catches it. Use it on the detail page for 5xx errors (keep the friendly 404 state).
+- [ ] Lazy-load the search route with `React.lazy` + `<Suspense fallback>` and check the Network tab for the separate chunk.
 - [ ] Audit your loading, empty, and error states on every screen with `failRate = 0.3`.
 
-**Concepts:** declarative loading and error states, what error boundaries can and can't catch, code splitting.
+**Concepts:** what error boundaries can and can't catch, declarative fallback UI, Suspense for code splitting.
+
+**Be ready to answer:** Why can't an error boundary catch an error thrown in a `.then()` or an `onClick`? How did you work around that?
 
 ---
 
-## Milestone 9: Testing (1 hr)
+## Milestone 10: Testing (1 hr)
 
 `npm i -D vitest jsdom @testing-library/react @testing-library/user-event @testing-library/jest-dom`
 
-The fake backend runs in tests too: `src/mocks/node.ts` exports an MSW `server` with the same handlers. Latency is automatically 0 under Vitest.
+The fake backend runs in tests too: `src/mocks/node.ts` exports an MSW `server` with the same handlers, and axios requests go through it unchanged. Latency is automatically 0 under Vitest.
 
 - [ ] Configure Vitest (`test: { environment: 'jsdom', setupFiles: ['src/test/setup.ts'] }` in `vite.config.ts`, plus `"types": ["vitest/globals"]` if you use globals).
-- [ ] `src/test/setup.ts`: `server.listen()` in `beforeAll`, `server.resetHandlers()` + `localStorage.clear()` + `await fetch('/api/_reset', { method: 'POST' })` in `afterEach`, and `server.close()` in `afterAll`.
-- [ ] `src/test/render.tsx`: `renderWithProviders(ui, { route })` creates a **fresh `QueryClient` per test** (with `retry: false`) and a `MemoryRouter`.
+- [ ] `src/test/setup.ts`: `server.listen()` in `beforeAll`, `server.resetHandlers()` in `afterEach`, `server.close()` in `afterAll`.
+- [ ] Also in `afterEach`: `queryCache.clear()`, `localStorage.clear()`, and `await fetch('/api/_reset', { method: 'POST' })`. Notice **why** the cache needs clearing: it's module-level, so it leaks between tests. (That's why TanStack Query recommends a new `QueryClient` per test. Could your cache be created per app and provided via Context instead?)
+- [ ] `src/test/render.tsx`: `renderWithProviders(ui, { route })` with a `MemoryRouter` and your theme provider.
 - [ ] Tests (query by role and label, like a user would):
   - [ ] The shelf shows the 4 seeded books.
   - [ ] Clicking the "Reading" tab shows only reading books, and the URL has `?status=reading`.
   - [ ] Shows the error state when the API fails: `server.use(http.get('/api/shelf', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))`.
   - [ ] An optimistic status change **rolls back** when `PATCH` fails.
+  - [ ] Unit test your `queryCache`: two simultaneous `fetch`es for the same key call `fn` **once**.
   - [ ] Unit test `useDebouncedValue` with `vi.useFakeTimers()` + `renderHook`.
 - [ ] Add `"test": "vitest"` to `package.json` scripts.
 
-**Concepts:** testing behaviour rather than implementation, network-level mocking instead of mocking `fetch` or hooks, test isolation.
+**Concepts:** testing behaviour rather than implementation, network-level mocking instead of mocking axios or hooks, test isolation and shared module state.
 
-**Be ready to answer:** Why mock the network (MSW) instead of `vi.mock('./api')`? Why a new `QueryClient` per test?
+**Be ready to answer:** Why mock the network (MSW) instead of `vi.mock('axios')`? What leaked between your tests before you added `queryCache.clear()`?
 
 ---
 
 ## Stretch goals (pick any)
 
+- **Compare against TanStack Query**: in a branch, replace `queryCache` / `useApiQuery` / `useApiMutation` with TanStack Query. Write down what you get for free (devtools, retries, garbage collection, refetch on window focus, infinite queries) and how the names map to yours. That gives you a concrete "I built X, the library adds Y" answer, and you'll be fluent if a job uses it.
+- **Raw `fetch` mini-challenge**: rewrite `lib/http.ts` on plain `fetch` with the same public API (non-2xx → throw, JSON, timeout via `AbortSignal.timeout`, base URL). If your layering is right, nothing else changes.
+- **Retry with backoff** in your data layer or an axios interceptor. Retry 5xx and network errors, never 4xx.
+- **Auth refresh flow**: design (on paper or in code) the classic axios interceptor that catches a `401`, refreshes the token once, queues concurrent requests, and replays them. It's a common interview whiteboard question.
+- **Refetch on window focus** (`visibilitychange`) and **cache eviction** (drop entries with no subscribers after N minutes).
+- **zod**: validate the Open Library and `/api` responses in the API layer, and infer your TS types from the schemas.
+- **Pagination / "load more"** for search (Open Library supports `page=`). How do you key that in your cache?
 - **React Compiler**: enable `babel-plugin-react-compiler` with the Vite React plugin, then delete any `useMemo` / `useCallback` you wrote. Does anything break?
-- **zod**: validate the Open Library and `/api` responses at the API layer, and infer your TS types from the schemas.
-- **Infinite scroll** on search with `useInfiniteQuery` (Open Library supports `page=`).
-- **`useTransition`** around filter changes, and compare it with `isFetching`.
-- **Route loaders**: move to React Router's data mode (`createBrowserRouter`) and prefetch queries in `loader`s with `queryClient.ensureQueryData`. This is how the frameworks avoid waterfalls.
 - **Redux Toolkit comparison**: re-implement the Zustand store as an RTK slice in a branch. Compare the boilerplate, and be able to talk about it.
 - **Accessibility pass**: keyboard-only use, focus management after a delete, `aria-live` for errors.
 - **Next up**: build the real Node backend that implements [`docs/API.md`](docs/API.md), point the app at it, turn off MSW in dev, and keep it for tests.
