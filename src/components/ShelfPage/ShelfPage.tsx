@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { shelfBooks } from '@/app/shelf/fixtures'
 import {
   type FilterStatus,
-  type ShelfBook,
   type SortOrder,
   NEXT_SORT,
   SORT_LABELS,
@@ -13,7 +12,8 @@ import { FilterBar } from '@/components/FilterBar'
 import { ShelfList } from '@/components/ShelfList'
 
 // TODO: temporary
-const SortSelect = ({className, label, onClick}) => {
+type SortSelectProps = { className: string; label: string; onClick: () => void }
+const SortSelect = ({className, label, onClick}: SortSelectProps) => {
   return (
     <BaseButton className={className} onClick={onClick}>
       {label}

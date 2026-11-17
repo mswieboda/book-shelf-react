@@ -2,8 +2,8 @@ export type ShelfBook = {
   key: string
   title: string
   author: string
-  coverId: number | null
-  publishYear: number | null
+  coverId: number
+  publishYear: number
   status: ReadingStatus
 }
 
@@ -17,13 +17,13 @@ export const STATUS_LABELS = {
   all: 'All', want: 'Want', reading: 'Reading', done: 'Done',
 } satisfies Record<ReadingStatus | FilterStatus, string>
 
-export const SORT_STATUSES = ['newest', 'title', 'published'] as const
-export type SortStatus = (typeof SORT_STATUSES)[number]
+export const SORT_ORDERS = ['newest', 'title', 'oldest'] as const
+export type SortOrder = (typeof SORT_ORDERS)[number]
 
 export const SORT_LABELS = {
   newest: 'Newest', oldest: 'Oldest', title: 'Title'
-} satisfies Record<SortStatus, string>
+} satisfies Record<SortOrder, string>
 
 export const NEXT_SORT = {
   newest: 'oldest', oldest: 'title', title: 'newest'
-} satisfies Record<SortStatus, SortStatus>
+} satisfies Record<SortOrder, SortOrder>

@@ -8,12 +8,12 @@ import { BaseButton } from '@/components/BaseButton'
 
 type FilterBarProps = {
   books: ShelfBook[]
-  value: FilterStatus
-  onChange: (status: FilterStatus) => void
+  filter: FilterStatus
+  onFilterChange: (status: FilterStatus) => void
 }
 
 export const FilterBar = ({ books, filter, onFilterChange }: FilterBarProps) => {
-  const onFilterSelected = (status) => {
+  const onFilterSelected = (status: FilterStatus) => {
     if (status !== filter) {
       onFilterChange(status)
     }
@@ -22,8 +22,8 @@ export const FilterBar = ({ books, filter, onFilterChange }: FilterBarProps) => 
   return (
     <>
       {Object.entries(STATUS_LABELS).map(([status, label]) => {
-        const onClick = () => onFilterSelected(status)
-        const count = filterBooks(books, status).length
+        const onClick = () => onFilterSelected(status as FilterStatus)
+        const count = filterBooks(books, status as FilterStatus).length
 
         return (
           <BaseButton

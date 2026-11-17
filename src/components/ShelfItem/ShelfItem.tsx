@@ -1,4 +1,10 @@
-export function ShelfItem({ book }) {
+import { type ShelfBook } from '@/app/shelf/types'
+
+type ShelfItemProps = {
+  book: ShelfBook
+}
+
+export function ShelfItem({ book }: ShelfItemProps) {
   const {title, author, coverId, publishYear, status} = book
 
   return (

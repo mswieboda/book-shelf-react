@@ -1,3 +1,5 @@
+import type { FilterStatus, ShelfBook, SortOrder } from '@/app/shelf/types'
+
 export const filterBooks = (books: ShelfBook[], filter: FilterStatus) => {
   if (filter !== 'all') {
     return books.filter((book) => {
