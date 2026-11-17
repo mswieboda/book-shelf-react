@@ -1,6 +1,6 @@
-# react-practice
+# book-shelf
 
-Vite + React 19 + TypeScript + Tailwind v4: an interview-prep sandbox.
+"Book Shelf" - a reading-list web app written with Vite + React 19 + TypeScript + Tailwind v4.
 
 **Start here → [CHALLENGE.md](CHALLENGE.md)** (build "Shelf", a reading-list app, milestone by milestone, with axios and a hand-built data layer)
 
