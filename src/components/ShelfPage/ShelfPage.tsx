@@ -3,43 +3,50 @@ import { shelfBooks } from '@/app/shelf/fixtures'
 import {
   type FilterStatus,
   type SortOrder,
-  NEXT_SORT,
   SORT_LABELS,
 } from '@/app/shelf/types'
-import { filterBooks, sortBooks } from '@/app/shelf/util'
-import { BaseButton } from '@/components/BaseButton'
+import { filterBooks, sortBooks, updateBookStatus, removeBook } from '@/app/shelf/util'
 import { FilterBar } from '@/components/FilterBar'
 import { ShelfList } from '@/components/ShelfList'
 
-// TODO: temporary
-type SortSelectProps = { className: string; label: string; onClick: () => void }
-const SortSelect = ({className, label, onClick}: SortSelectProps) => {
+type SortSelectProps = { sort: SortOrder, onChange: (sort: string) => void, className: string }
+const SortSelect = ({sort, onChange, className}: SortSelectProps) => {
   return (
-    <BaseButton className={className} onClick={onClick}>
-      {label}
-    </BaseButton>
+    <select
+      name="sort"
+      value={sort}
+      onChange={e => onChange(e.target.value)}
+      className={className}
+    >
+      {Object.entries(SORT_LABELS).map(([sort, label]) => {
+        return <option key={sort} value={sort}>Sort: {label}</option>
+      })}
+    </select>
   )
 }
 
 export const ShelfPage = () => {
+  const [books, setBooks] = useState(shelfBooks)
   const [filter, setFilter] = useState<FilterStatus>('want')
   const [sort, setSort] = useState<SortOrder>('newest')
 
-  const books = sortBooks(filterBooks(shelfBooks, filter), sort)
-  const cycleNextSort = () => {
-    setSort(NEXT_SORT[sort])
-  }
+  const visibleBooks = sortBooks(filterBooks(books, filter), sort)
+  const onSortChange = (newSort: string) => setSort(newSort as SortOrder)
 
   return (
     <div>
       <div className="flex justify-center">
         <div className="flex-1 flex justify-center">
-          <FilterBar books={shelfBooks} filter={filter} onFilterChange={setFilter} />
-          <SortSelect key="sort" className="flex-1" label={`Sort: ${SORT_LABELS[sort]}`} onClick={cycleNextSort} />
+          <FilterBar books={books} filter={filter} onFilterChange={setFilter} />
+          <SortSelect key="sort" sort={sort} onChange={onSortChange} className="flex-1" />
         </div>
       </div>
 
-      <ShelfList books={books} />
+      <ShelfList
+        books={visibleBooks}
+        onUpdateStatus={(key, newStatus) => setBooks(prev => updateBookStatus(key, newStatus, prev))}
+        onRemove={(key) => setBooks(prev => removeBook(key, prev))}
+      />
     </div>
   )
 }

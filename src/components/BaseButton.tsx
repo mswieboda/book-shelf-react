@@ -1,8 +1,8 @@
 type BaseButtonProps = {
   isActive?: boolean
-  className: string
-  onClick: () => void
-  children: React.ReactNode
+  className?: string
+  onClick?: () => void
+  children?: React.ReactNode
 }
 
 

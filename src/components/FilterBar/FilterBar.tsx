@@ -1,7 +1,7 @@
 import {
   type FilterStatus,
   type ShelfBook,
-  STATUS_LABELS
+  FILTER_STATUS_LABELS
 } from '@/app/shelf/types'
 import { filterBooks } from '@/app/shelf/util'
 import { BaseButton } from '@/components/BaseButton'
@@ -21,7 +21,7 @@ export const FilterBar = ({ books, filter, onFilterChange }: FilterBarProps) => 
 
   return (
     <>
-      {Object.entries(STATUS_LABELS).map(([status, label]) => {
+      {Object.entries(FILTER_STATUS_LABELS).map(([status, label]) => {
         const onClick = () => onFilterSelected(status as FilterStatus)
         const count = filterBooks(books, status as FilterStatus).length
 

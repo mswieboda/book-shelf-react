@@ -85,6 +85,11 @@ Build the **shelf screen** using a hardcoded array (copy 3–4 books from `/api/
 
 **Be ready to answer:** Why not store `filteredBooks` in state? Why does `key={index}` cause bugs here (try it with the remove button and a focused select)?
 
+> **Deferred from M1 (do as "M1.5", or fold into M3):**
+> - [ ] Empty state ("Nothing here yet") when a filter has no books. M3 already asks for an empty state, so it fits naturally there.
+> - [ ] `Cover` component that handles `coverId === null`.
+> - [ ] Decide the default filter: `ShelfPage` currently starts on `'want'`, not `'all'`.
+
 ---
 
 ## Milestone 2: The HTTP client & API layer (45 min)

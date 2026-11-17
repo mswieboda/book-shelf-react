@@ -1,4 +1,4 @@
-import type { FilterStatus, ShelfBook, SortOrder } from '@/app/shelf/types'
+import type { FilterStatus, ReadingStatus, ShelfBook, SortOrder } from '@/app/shelf/types'
 
 export const filterBooks = (books: ShelfBook[], filter: FilterStatus) => {
   if (filter !== 'all') {
@@ -21,3 +21,10 @@ export const sortBooks = (books: ShelfBook[], sort: SortOrder) => {
   // back-up is sort by title
   return books.toSorted((a, b) => a.title.localeCompare(b.title))
 }
+
+export const updateBookStatus = (key: string, status: ReadingStatus, books: ShelfBook[]) =>
+  books.map(b => b.key === key ? {...b, status: status } : b)
+
+// Pure: returns a NEW array without the book; never touches the input.
+export const removeBook = (key: string, books: ShelfBook[]): ShelfBook[] =>
+  books.filter((b) => b.key !== key)
