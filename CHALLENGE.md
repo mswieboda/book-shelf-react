@@ -403,10 +403,272 @@ The fake backend runs in tests too: `src/mocks/node.ts` exports an MSW `server` 
 - **React Compiler**: enable `babel-plugin-react-compiler` with the Vite React plugin, then delete any `useMemo` / `useCallback` you wrote. Does anything break?
 - **Redux Toolkit comparison**: re-implement the Zustand store as an RTK slice in a branch. Compare the boilerplate, and be able to talk about it.
 - **Accessibility pass**: keyboard-only use, focus management after a delete, `aria-live` for errors.
-- **Next up**: build the real Node backend that implements [`docs/API.md`](docs/API.md), point the app at it, turn off MSW in dev, and keep it for tests.
+- **Next up**: build the real backend in [Part 2](#part-2-the-backend-node-gateway--ruby-microservice).
 
 ---
 
 ## Final self-check
 
 Take out your Milestone 0 paper diagram. For each piece of state, compare where you *planned* to put it with where it *ended up*. Being able to explain that difference is what an architecture interview is looking for.
+
+---
+---
+
+# Part 2: The backend (Node gateway + Ruby microservice)
+
+You'll replace the MSW fake with real services, following the path many real systems take: **start with a monolith, then extract a service.**
+
+1. A **Node + Express** server implements [`docs/API.md`](docs/API.md) as a monolith on Postgres.
+2. You **extract** the Reviews domain (`rating` + `notes`) into a **Ruby service, built with Rails API mode with Grape mounted inside it**, with its own database.
+3. Node becomes the **gateway (BFF)**: the browser only ever talks to Node, and Node calls Ruby.
+4. Node gains a **GraphQL** endpoint next to REST.
+5. **Docker Compose** runs it all.
+
+```
+ Browser (React, :5173)
+   │  /api/*  (Vite proxy)          /graphql
+   ▼                                   ▼
+ ┌─────────────────────────────────────────┐
+ │  shelf-api  Node 24 · Express 5 · TS    │  :4000   ← the only public entry point
+ │  routes → handlers → services → repos   │
+ │  Prisma ──────────► Postgres db "shelf" │
+ │  reviewsClient (axios) ─┐               │
+ └─────────────────────────┼───────────────┘
+                           ▼  internal HTTP, snake_case, /v1
+ ┌─────────────────────────────────────────┐
+ │  reviews  Ruby 3.4 · Rails 8 API · Grape│  :4001
+ │  ActiveRecord ──► Postgres "reviews_*"  │
+ └─────────────────────────────────────────┘
+```
+
+**Decisions already made** (be ready to defend them):
+
+| Decision | Choice | Why |
+|---|---|---|
+| Approach | Monolith first, then extract | It's how real systems get there, and you can explain the migration in an interview |
+| Node stack | Express 5 + TypeScript, zod, pino, Prisma, Vitest + supertest | What most 2022/23-era Node codebases look like |
+| Ruby stack | Rails 8 API mode + Grape 2.x + grape-entity, RSpec | Rails handles the infrastructure (ActiveRecord, migrations, config, test env); Grape handles the endpoints |
+| Data | Postgres, **one database per service** | Services own their data, and only reach each other's data through APIs |
+| Topology | Node is the gateway; Ruby is internal only | The frontend contract never changes |
+| Remove a book | **Soft delete** (`archived_at`); re-adding the same `workKey` restores the row with its **same id** | Notes and rating come back on re-add, and a remove never has to call Ruby |
+| Ruby is down | **Reads degrade** (`rating: null`, `notes: ""`); **writes fail** | A list without ratings is better than no list, but a silently lost write is not acceptable |
+| Gateway → Ruby | axios, with its own instance | The same ideas as M2, now server to server |
+
+**Ground rules:**
+1. **`docs/API.md` is the contract.** The React app must not change, except for turning MSW off in dev and adding the Vite proxy. If you have to touch a component, something leaked.
+2. **Layers in Node:** route → handler (HTTP only) → service (business rules) → repository (database). Handlers never touch Prisma, and services never touch `req`/`res`.
+3. **Ruby is never called by the browser.** Only Node knows its URL.
+4. Same as Part 1: one milestone per commit (`"B2: Prisma + soft delete"`), write your plan first, and ask for reviews, not solutions.
+
+**When to start:** any time after M3, since the frontend only needs the contract. Doing it after M7 feels most natural.
+
+**Setup:** [`docs/BACKEND_SETUP.md`](docs/BACKEND_SETUP.md) covers installing the tools (Node 24 via fnm, Ruby 3.4 via asdf, Rails, libpq, Docker Desktop), the ports and databases, env files, how to start everything each day, a verification checklist, and troubleshooting. Do its section 1 before B0.
+
+**Repo layout:**
+```
+src/                 React app (Part 1)
+server/              Node gateway: its own package.json, tsconfig and prisma/
+services/reviews/    Rails API + Grape
+docker/              Postgres init script
+docker-compose.yml
+```
+
+---
+
+## Milestone B0: Orientation & Postgres (45 min)
+
+- [ ] Draw the diagram above on paper from memory. For each field of `ShelfBook`, mark **which service owns it** after the extraction.
+- [ ] Machine setup: work through [`docs/BACKEND_SETUP.md` section 1](docs/BACKEND_SETUP.md#1-one-time-machine-setup-any-time) and pin Node and Ruby for the repo.
+- [ ] `docker-compose.yml` with **only Postgres** for now (`postgres:17`, with a named volume and a healthcheck). Add an init script in `docker/postgres/` that creates `shelf` and `shelf_test`. (Rails creates its own `reviews_*` databases in B4.)
+- [ ] `docker compose up -d`, then `psql` in (`docker compose exec postgres psql -U postgres -l`) and confirm both databases exist.
+- [ ] Scaffold `server/`: `npm init`, TypeScript, `tsx` for dev (`tsx watch src/index.ts`), and Express 5 with a `GET /healthz` that returns `{ ok: true }`.
+
+**Concepts:** why one database per service, why containerized Postgres beats installing it locally (it's disposable, version-pinned and the same for everyone), and how compose networking works (services reach each other by **service name**, the host reaches them through **published ports**).
+
+<details><summary>Hint: creating two databases at startup</summary>
+
+The official Postgres image runs any `*.sql` or `*.sh` file mounted at `/docker-entrypoint-initdb.d/` the **first** time the volume is created. Mount `./docker/postgres` there. Gotcha: if you change the script later, it won't run again until you `docker compose down -v` (which deletes the volume).
+</details>
+
+**Be ready to answer:** Why not have both services share one database with two schemas? What does that couple together?
+
+---
+
+## Milestone B1: Express REST monolith (1.5 hr)
+
+Implement every endpoint in `docs/API.md` (including `POST /api/_reset`) in `server/`, using an **in-memory array** for now. The database comes in B2.
+
+- [ ] **Layers:** `routes/shelf.ts` → `handlers` → `services/shelfService.ts` → `repositories/shelfRepo.ts` (with an in-memory implementation). Write the repository as an **interface**, because B2 swaps the implementation.
+- [ ] **Validation with zod** on query strings and bodies (`status` must be a `ReadingStatus`, `rating` 1–5 or null, `notes` ≤ 1000). Bad input → `400 { error }`.
+- [ ] **Domain errors**: a small `AppError` (or `NotFoundError`, `ConflictError`) thrown by services and turned into HTTP by **one error-handling middleware**. Every error response is `{ error: string }`, including unknown routes (404) and crashes (500, without leaking stack traces).
+- [ ] **Async errors:** let Express 5 forward rejected promises from `async` handlers to your error middleware. No try/catch in handlers.
+- [ ] **Request logging** with `pino-http`, and a **request id** (reuse an incoming `X-Request-Id` or generate one, then send it back in the response).
+- [ ] **CORS:** you don't need it if the browser goes through the Vite proxy. Be able to explain why.
+- [ ] **Point the frontend at it:** in `vite.config.ts`, `server.proxy: { '/api': 'http://localhost:4000' }`, and gate MSW behind an env flag (e.g. `VITE_USE_MOCKS=true`) in `main.tsx`. Keep MSW for frontend tests.
+- [ ] Click through the whole app against the real server. Nothing in `src/features` should change.
+
+**Concepts:** middleware order, the four-argument error middleware, separating HTTP from business logic, validating at the edge, and the Express 4 vs 5 differences.
+
+<details><summary>Hint: Express 4 vs 5, the interview version</summary>
+
+In **Express 4**, a rejected promise in an `async` handler is *not* caught: the request hangs or the process logs an unhandled rejection. Teams wrapped every handler (`asyncHandler(fn)`) or imported `express-async-errors`. **Express 5** forwards rejections to `next(err)` for you. Other v5 changes you might hit: wildcard routes need a name (`/*splat`), and `req.query` is a read-only getter, so you can't reassign it after zod parses it. Store the parsed value elsewhere, e.g. `res.locals`.
+</details>
+
+<details><summary>Hint: where the 404 and error handlers go</summary>
+
+Order matters. Register routes first, then a catch-all `app.use((req, res) => …404…)` with **no path**, then the error handler `app.use((err, req, res, next) => …)` last. Express recognizes an error handler by its **four** parameters, so keep `next` even if you don't use it.
+</details>
+
+**Be ready to answer:** Why keep `req`/`res` out of the service layer? (Hint: GraphQL in B6 reuses the services.) What does `app.listen` do that a test with supertest doesn't need?
+
+---
+
+## Milestone B2: Postgres + Prisma, and soft delete (1.5 hr)
+
+- [ ] `npm i prisma @prisma/client` and `npx prisma init`. Model `ShelfBook` in `schema.prisma`: uuid id, unique `workKey`, `authors` as a `String[]`, a `status` enum, nullable `rating`, `notes`, `addedAt`, `updatedAt`, **`archivedAt` (nullable)**.
+- [ ] `prisma migrate dev`, plus a **seed script** with the same 4 books as the mock (`_reset` can reuse it).
+- [ ] **Swap only the repository** for a Prisma implementation. If you have to edit a handler or service, your layers leaked.
+- [ ] **Map Prisma errors to domain errors in the repository**: unique violation (`P2002`) → `ConflictError` (409), record not found (`P2025`) → `NotFoundError` (404).
+- [ ] **Soft delete:** `DELETE /api/shelf/:id` sets `archivedAt` and returns `204`. Every read filters out archived rows (`GET` of an archived id → `404`).
+- [ ] **Restore on re-add:** `POST` with a `workKey` that matches an *archived* row un-archives it and returns `201` with the **same id**. A `workKey` that matches an *active* row is still `409`. Decide what happens to `status` and `addedAt` on restore, and write it down.
+- [ ] Add a "Real server" note to `docs/API.md` describing the restore behavior.
+
+**Concepts:** schema-first ORM and migrations (compare with ActiveRecord migrations), mapping DB errors at the boundary, soft delete trade-offs, and connection pooling (one `PrismaClient` per process).
+
+<details><summary>Hint: the 409 check and race conditions</summary>
+
+"Check if it exists, then insert" has a race: two simultaneous `POST`s can both pass the check. Let the **unique constraint** be the source of truth and translate the error. Because restore reuses the archived row, a plain `@unique` on `workKey` still works. You don't need a partial index.
+</details>
+
+**Be ready to answer:** Prisma vs a query builder (Knex) vs raw SQL: what do you give up? What does soft delete cost you (every query needs a filter, unique constraints get tricky, GDPR "delete my data" requests)? Where would you put an index here?
+
+---
+
+## Milestone B3: Testing the API (1 hr)
+
+- [ ] Vitest + `supertest` in `server/`. Export `app` separately from `listen` so tests don't open a port.
+- [ ] A **test database** (`shelf_test`) via `DATABASE_URL` in a test env file. Reset between tests (truncate or re-seed in `beforeEach`).
+- [ ] Contract tests, one `describe` per endpoint: the happy path, `400`, `404`, `409`, the `{ error }` shape, and **remove → re-add restores the same id**.
+- [ ] One unit test of a service with a fake in-memory repository. Notice how easy the repository interface makes this.
+
+**Concepts:** integration tests vs unit tests on the server, test isolation with a real database, testing through HTTP.
+
+**Be ready to answer:** Why test against real Postgres instead of mocking Prisma? When would you mock the repository?
+
+---
+
+## Milestone B4: The Reviews service (Rails API + Grape) (2 hr)
+
+Build the service on its own first. Node doesn't call it until B5.
+
+- [ ] Generate the app with the flags in [`docs/BACKEND_SETUP.md` section 4](docs/BACKEND_SETUP.md#4-rails--grape-reviews-service-b4) (API mode, Postgres, RSpec instead of Minitest). It uses its own `reviews_development` / `reviews_test` databases on the same Postgres server. Port **4001**.
+- [ ] `Review` model: `shelf_book_id` (uuid, **unique**, no foreign key, because the shelf lives in another database), `rating` (1–5 or null), `notes` (≤ 1000, default `""`), timestamps. Put the validations in the model **and** the constraints in the migration.
+- [ ] **Grape mounted in Rails** (`mount ... => '/'` in `config/routes.rb`), versioned under `/v1`:
+  - `GET /v1/reviews?shelf_book_ids[]=…`: **batch** lookup (returns only the ones that exist)
+  - `GET /v1/reviews/:shelf_book_id` → `200` or `404`
+  - `PUT /v1/reviews/:shelf_book_id`: **upsert**, idempotent. Returns the review.
+  - `DELETE /v1/reviews/:shelf_book_id` → `204` (for admin/cleanup; the shelf no longer calls it on remove)
+- [ ] Grape `params do … end` for coercion and validation, **grape-entity** for the response shape, and `rescue_from` so every error is `{ "error": "…" }` (validation → 400, `RecordNotFound` → 404, anything else → 500).
+- [ ] snake_case JSON. Node will map it.
+- [ ] RSpec request specs, plus FactoryBot for a review.
+
+**Concepts:** what Rails provides vs what Grape provides, Zeitwerk autoloading, idempotency, referencing data across services by id (no foreign keys across databases).
+
+<details><summary>Hint: Zeitwerk + Grape in <code>app/api</code></summary>
+
+Every folder under `app/` is an autoload root, so `app/api/v1/reviews.rb` is expected to define `V1::Reviews`, **not** `API::V1::Reviews`. Pick one: drop the `API` namespace, or nest it (`app/api/api/v1/...`) and add an `API` acronym inflection. `bin/rails zeitwerk:check` tells you if you got it right.
+</details>
+
+<details><summary>Hint: why PUT, not POST</summary>
+
+Each shelf book has exactly one review, so the client knows the resource's address up front (`/v1/reviews/:shelf_book_id`). `PUT` there means "make it look like this", and sending it twice gives the same result. That's what makes it **safe to retry** from the gateway in B5. A `POST` retried after a timeout could create duplicates.
+</details>
+
+**Be ready to answer:** Why Grape inside Rails instead of plain Rails controllers? (Params DSL, versioning, entities, and teams with existing Grape APIs.) What would you lose with Sinatra or Roda?
+
+---
+
+## Milestone B5: The extraction: Node becomes the gateway (2 hr)
+
+The interview story: "We moved reviews out of the monolith without the frontend noticing."
+
+- [ ] **`reviewsClient`** in `server/src/clients/reviews.ts`: an axios instance (`baseURL` from env, **timeout around 2s**), a response interceptor that normalizes errors (the same idea as `ApiError` in M2), mapping snake_case ↔ camelCase **at this boundary only**, and forwarding of the incoming **`X-Request-Id`**.
+- [ ] **Retries for idempotent calls only** (`GET`, `PUT`, `DELETE`): one or two retries with a short backoff, only on network errors and 5xx, never on 4xx.
+- [ ] **Compose the responses** so `docs/API.md` stays exactly the same:
+  - `GET /api/shelf`: fetch the books, then **one batch call** for their reviews, and merge. No N+1.
+  - `GET /api/shelf/:id`: book + single review.
+  - `PATCH /api/shelf/:id`: `status` goes to Postgres; `rating` / `notes` go to Ruby via `PUT`. Pass Ruby's `400` and its `{ error }` through unchanged.
+- [ ] **Failure policy:** if Ruby is down or times out, **reads** return books with `rating: null, notes: ""` (and log a warning); **writes** that touch rating/notes fail with `502`/`503 { error }`.
+- [ ] **Migrate the data:** a one-off backfill script copies existing `rating` / `notes` from the `shelf` DB into Ruby (via its `PUT`, so it's idempotent and safe to re-run). Then a Prisma migration **drops** those columns from Node's DB.
+- [ ] Node tests: mock the Ruby service **at the network level** with MSW's `setupServer` (the same tool as the frontend!). Test the merge, the degrade-on-read and the fail-on-write paths.
+- [ ] Run the React app end to end with all three pieces up. Stop Rails and confirm the shelf still loads.
+
+**Concepts:** BFF/gateway pattern, partial failure, timeouts and retries, idempotency, N+1 across services, data migration during an extraction (expand → migrate → contract), correlation ids.
+
+<details><summary>Hint: the PATCH that's half saved</summary>
+
+`{ status: 'done', rating: 5 }` writes to two databases with no shared transaction. If Postgres succeeds and Ruby fails, what does the client see? Options: (1) call Ruby **first**, since it's the one more likely to fail, then Postgres; (2) on failure, compensate by reverting the status; (3) accept it and return an error saying what failed. Pick one and explain why. This is the smallest version of the "distributed transaction / saga" interview question.
+</details>
+
+<details><summary>Hint: how soft delete paid off</summary>
+
+Because remove only archives the shelf row, the review simply stays in Ruby. There's no cross-service delete, no orphan cleanup job and no "Ruby was down during the delete" case, and re-add gets the notes back for free. Being able to say "we changed the product behavior to avoid a distributed write" is a strong answer.
+</details>
+
+**Be ready to answer:** Why must the browser never call Ruby directly? What happens to latency when every shelf read fans out to a second service, and how would you fix it (parallel calls, caching, putting the data where it's read)? When is extracting a service the *wrong* move?
+
+---
+
+## Milestone B6: GraphQL on the gateway (1.5 hr)
+
+GraphQL is an **API layer**, not a database layer: it sits next to REST in Node and calls the **same services**. Apollo Server is what 2022/23 job descriptions usually mean by it.
+
+- [ ] Apollo Server mounted on Express at `/graphql`. (Apollo's Express integration lives in a separate package; use the one for **Express 5**.)
+- [ ] **Schema-first SDL:** `type ShelfBook { id, workKey, title, authors, coverId, firstPublishYear, status, addedAt, updatedAt, review: Review }`, `type Review { rating, notes }`, `enum ReadingStatus`.
+  - Queries: `shelf(status: ReadingStatus): [ShelfBook!]!`, `book(id: ID!): ShelfBook`
+  - Mutations: `addBook`, `updateBook`, `removeBook`
+- [ ] Resolvers call your **services**, never Prisma directly.
+- [ ] **`ShelfBook.review` as a field resolver backed by DataLoader**, so `shelf { review { rating } }` makes **one** batch call to Ruby, not one per book. Create the loaders **per request** (in the context function).
+- [ ] Errors: map domain errors to GraphQL errors with `extensions.code` (`NOT_FOUND`, `BAD_USER_INPUT`, …). If Ruby is down, `review` resolves to `null` with an error in `errors[]` while the rest of the data still returns. That's GraphQL's built-in partial success.
+- [ ] Optional: `graphql-codegen` to generate TypeScript types for your resolvers.
+- [ ] Try it in Apollo Sandbox (at `/graphql` in dev). Write one query that over-fetches in REST terms (the whole shelf) and one that fetches just titles.
+- [ ] Supertest a couple of queries (`POST /graphql` with `{ query, variables }`).
+
+**Concepts:** schema vs resolvers, field resolvers, the N+1 problem and DataLoader, partial errors, why GraphQL usually answers `200` even when something failed.
+
+<details><summary>Hint: why DataLoader must be per request</summary>
+
+DataLoader batches calls within one tick **and caches** by key. A loader shared across requests would serve user A's cached data to user B and never see updates. A new loader per request scopes both the batching and the cache to that request.
+</details>
+
+**Be ready to answer:** REST vs GraphQL: when would you choose each? Why is HTTP caching harder with GraphQL, and what does Apollo Client's normalized cache do instead (compare with your M5 `queryCache`)? How would you stop a client sending a very expensive query (depth or complexity limits, persisted queries)?
+
+---
+
+## Milestone B7: Everything in Docker Compose (1 hr)
+
+- [ ] **`server/Dockerfile`:** multi-stage (install + build stage → slim runtime stage running `node dist/index.js`), with a `.dockerignore`, `prisma migrate deploy` on start, and a non-root user.
+- [ ] **`services/reviews/Dockerfile`:** Rails 7.1+ already generated one. Read it and understand it rather than rewriting it (note: it's production-oriented). Run `db:prepare` on start.
+- [ ] Add both to `docker-compose.yml`: `depends_on` with `condition: service_healthy` on Postgres, **env vars for configuration** (`DATABASE_URL`, `REVIEWS_URL=http://reviews:4001`, which uses the service name, not localhost), and healthchecks (`/healthz`, and Rails's built-in `/up`).
+- [ ] `docker compose up --build` brings up the whole backend. The Vite dev server stays on your machine and proxies to `localhost:4000`.
+- [ ] **Day-to-day dev:** keep Postgres in Docker, and run Node (`tsx watch`) and Rails (`bin/rails s`) natively for fast reloads. Or try `docker compose watch`. Write down which you prefer and why.
+
+**Concepts:** image layers and caching, multi-stage builds, configuration through environment variables, service discovery by name, startup ordering vs readiness.
+
+**Be ready to answer:** Why does `depends_on` alone not guarantee Postgres is ready? What changes between this compose file and a real deployment (secrets, migrations as a separate step, multiple replicas, a real gateway or load balancer)?
+
+---
+
+## Backend stretch goals (pick any)
+
+- **Second extraction: a reading log / stats service** (Ruby again, or Node to compare): `POST /reading-sessions` (pages read per day), plus a yearly stats endpoint. Who owns what, and how does the gateway expose it?
+- **Third extraction: book metadata.** Move Open Library calls behind your own service with caching (Postgres table or Redis) and rate limiting. The frontend's `searchBooks` would then hit `/api/search`. What happens to the M4 search code?
+- **Events instead of HTTP calls:** publish `shelf_book.archived` (Redis streams, or a Postgres outbox table polled by a worker) and let Reviews react. Explain the **outbox pattern** and why "write to DB then publish" isn't safe on its own.
+- **Circuit breaker** around `reviewsClient` (e.g. `opossum`): stop calling Ruby for 30s after repeated failures.
+- **Auth at the gateway:** JWT on `/api`, plus a service-to-service token (or mTLS, discussed only) between Node and Ruby.
+- **OpenAPI:** `grape-swagger` in Ruby, and zod → OpenAPI in Node. Generate the frontend's types from it.
+- **Contract tests between services** (Pact, or a shared JSON fixture both test suites use).
+- **Express 4 rewrite** of B1's error handling (`asyncHandler` wrappers) to feel the difference.
+- **Apollo Client on the frontend** for one screen. Compare its normalized cache with your `queryCache`.
+- **NestJS comparison:** port one module and compare its decorators/DI with your hand-wired layers.
+- **Observability:** OpenTelemetry tracing across Node → Ruby, using the request id you already pass along.

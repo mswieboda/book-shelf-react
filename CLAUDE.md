@@ -27,7 +27,7 @@ An interview-prep practice app. The user is re-learning React fundamentals and a
 - **MSW v3** fakes the backend in dev (`src/mocks/`). Start option is `onUnhandledFrame: 'bypass'` (v3 renamed it from `onUnhandledRequest`). Latency is 0 under Vitest. `src/mocks/node.ts` is for tests.
 - Rule: app code never imports from `src/mocks/`; talk to it only over HTTP via axios.
 - Mock knobs live in localStorage: `mock:latency`, `mock:failRate`. `POST /api/_reset` restores the seed data.
-- A Node backend implementing `docs/API.md` is planned later. Not now.
+- **Backend = Part 2 of `CHALLENGE.md` (B0–B7)**, done after the frontend core. Node 24 + Express 5 + TS + zod + pino + Prisma is the gateway/monolith (`server/`). Reviews (rating + notes) gets extracted into **Rails 8 API + Grape** (`services/reviews/`). Postgres uses one database per service, and everything runs under Docker Compose. Soft delete with restore on re-add. Ruby outages: reads degrade, writes fail. GraphQL (Apollo Server + DataLoader) sits on the gateway next to REST. Don't re-litigate these choices.
 
 ## Progress
 
