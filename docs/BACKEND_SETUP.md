@@ -74,9 +74,12 @@ ruby -v                       # → ruby 3.4.12
 
 ```sh
 gem install rails -v '~> 8.0'   # latest 8.x, never a future 9.0
-asdf reshim ruby                # only if `rails` isn't found afterwards
+asdf reshim ruby                # creates the ~/.asdf/shims/rails shim if it's missing
+rehash                          # clears zsh's cached command locations (see note)
 rails -v                        # → Rails 8.x.y
 ```
+
+> **"Rails is not currently installed on this system… `sudo gem install rails`"**: that's macOS's stub at `/usr/bin/rails`, not your asdf Ruby. If you ran `rails` before its shim existed, zsh cached the `/usr/bin` location, and `cd` or `reshim` won't clear it. Run `rehash` (or `hash -r`), or open a new terminal tab. Never follow the stub's `sudo gem install` advice, because that installs into the system Ruby. `which -a rails` should list `~/.asdf/shims/rails` first.
 
 ### 1.4 libpq (`psql` and the `pg` gem)
 
@@ -452,7 +455,8 @@ Run these top to bottom. Each one depends on the ones before it.
 | `port 5432 is already allocated` | Another Postgres is running locally (`lsof -i :5432`). Stop it (`brew services stop postgresql@…`), or map `"5433:5432"` and use port 5433 in your URLs. |
 | `database "shelf" does not exist` | The init script only runs on a **new** volume. `docker compose down -v && docker compose up -d`. |
 | `No version is set for command ruby` | No `.tool-versions` in this directory or its parents. See 1.2. |
-| `rails: command not found` after `gem install` | `asdf reshim ruby` |
+| `rails: command not found` after `gem install` | `asdf reshim ruby`, then `rehash` |
+| `Rails is not currently installed on this system` | zsh cached the macOS stub `/usr/bin/rails`. Run `rehash` or open a new tab (see 1.3). |
 | `pg` gem fails to build (`pg_config` / `libpq-fe.h` not found) | `brew install libpq`, then `bundle config build.pg --with-pg-config=/opt/homebrew/opt/libpq/bin/pg_config` and `bundle install` again. |
 | Wrong Node version in `server/` | `fnm use` (or enable `--use-on-cd`, see 1.1). |
 | `ERR_MODULE_NOT_FOUND` running `dist/` but `tsx` works | Missing `.js` extension in a relative import (NodeNext; see 3.1). |
