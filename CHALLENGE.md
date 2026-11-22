@@ -447,7 +447,7 @@ You'll replace the MSW fake with real services, following the path many real sys
 |---|---|---|
 | Approach | Monolith first, then extract | It's how real systems get there, and you can explain the migration in an interview |
 | Node stack | Express 5 + TypeScript, zod, pino, Prisma, Vitest + supertest | What most 2022/23-era Node codebases look like |
-| Ruby stack | Rails 8 API mode + Grape 2.x + grape-entity, RSpec | Rails handles the infrastructure (ActiveRecord, migrations, config, test env); Grape handles the endpoints |
+| Ruby stack | Rails 8 API mode + Grape 4.x + grape-entity, RSpec | Rails handles the infrastructure (ActiveRecord, migrations, config, test env); Grape handles the endpoints |
 | Data | Postgres, **one database per service** | Services own their data, and only reach each other's data through APIs |
 | Topology | Node is the gateway; Ruby is internal only | The frontend contract never changes |
 | Remove a book | **Soft delete** (`archived_at`); re-adding the same `workKey` restores the row with its **same id** | Notes and rating come back on re-add, and a remove never has to call Ruby |
@@ -478,10 +478,10 @@ docker-compose.yml
 ## Milestone B0: Orientation & Postgres (45 min)
 
 - [ ] Draw the diagram above on paper from memory. For each field of `ShelfBook`, mark **which service owns it** after the extraction.
-- [ ] Machine setup: work through [`docs/BACKEND_SETUP.md` section 1](docs/BACKEND_SETUP.md#1-one-time-machine-setup-any-time) and pin Node and Ruby for the repo.
-- [ ] `docker-compose.yml` with **only Postgres** for now (`postgres:17`, with a named volume and a healthcheck). Add an init script in `docker/postgres/` that creates `shelf` and `shelf_test`. (Rails creates its own `reviews_*` databases in B4.)
-- [ ] `docker compose up -d`, then `psql` in (`docker compose exec postgres psql -U postgres -l`) and confirm both databases exist.
-- [ ] Scaffold `server/`: `npm init`, TypeScript, `tsx` for dev (`tsx watch src/index.ts`), and Express 5 with a `GET /healthz` that returns `{ ok: true }`.
+- [x] Machine setup: work through [`docs/BACKEND_SETUP.md` section 1](docs/BACKEND_SETUP.md#1-one-time-machine-setup-any-time) and pin Node and Ruby for the repo.
+- [x] `docker-compose.yml` with **only Postgres** for now (`postgres:17`, with a named volume and a healthcheck). Add an init script in `docker/postgres/` that creates `shelf` and `shelf_test`. (Rails creates its own `reviews_*` databases in B4.)
+- [x] `docker compose up -d`, then `psql` in (`docker compose exec postgres psql -U postgres -l`) and confirm both databases exist.
+- [x] Scaffold `server/`: `npm init`, TypeScript, `tsx` for dev (`tsx watch src/index.ts`), and Express 5 with a `GET /healthz` that returns `{ ok: true }`.
 
 **Concepts:** why one database per service, why containerized Postgres beats installing it locally (it's disposable, version-pinned and the same for everyone), and how compose networking works (services reach each other by **service name**, the host reaches them through **published ports**).
 
@@ -561,7 +561,7 @@ Order matters. Register routes first, then a catch-all `app.use((req, res) => �
 
 Build the service on its own first. Node doesn't call it until B5.
 
-- [ ] Generate the app with the flags in [`docs/BACKEND_SETUP.md` section 4](docs/BACKEND_SETUP.md#4-rails--grape-reviews-service-b4) (API mode, Postgres, RSpec instead of Minitest). It uses its own `reviews_development` / `reviews_test` databases on the same Postgres server. Port **4001**.
+- [x] Generate the app with the flags in [`docs/BACKEND_SETUP.md` section 4](docs/BACKEND_SETUP.md#4-rails--grape-reviews-service-b4) (API mode, Postgres, RSpec instead of Minitest). It uses its own `reviews_development` / `reviews_test` databases on the same Postgres server. Port **4001**.
 - [ ] `Review` model: `shelf_book_id` (uuid, **unique**, no foreign key, because the shelf lives in another database), `rating` (1–5 or null), `notes` (≤ 1000, default `""`), timestamps. Put the validations in the model **and** the constraints in the migration.
 - [ ] **Grape mounted in Rails** (`mount ... => '/'` in `config/routes.rb`), versioned under `/v1`:
   - `GET /v1/reviews?shelf_book_ids[]=…`: **batch** lookup (returns only the ones that exist)

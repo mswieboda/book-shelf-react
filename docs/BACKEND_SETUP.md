@@ -8,6 +8,14 @@ How to install, configure and run everything for [Part 2 of the challenge](../CH
 
 Written for macOS on Apple Silicon, using the tools already on this machine: **Homebrew**, **fnm** (Node), **asdf** (Ruby) and **Docker Desktop**.
 
+> **Status (2026-11-20): the setup work below is already done.**
+> - Section 1: the toolchain is installed and pinned.
+> - Section 2: Postgres is in Docker, with the `shelf` and `shelf_test` databases.
+> - Sections 3.1–3.2: the `server/` scaffold, with Express 5 and `GET /healthz`.
+> - Sections 4.1–4.3: `services/reviews/`, with Grape, RSpec and FactoryBot added, `database.yml` configured, and `bin/dev` on port 4001.
+>
+> Still yours to do when you reach them: 3.3 (Vite proxy + MSW flag, B1), 3.4 (Prisma, B2) and 3.5 (Vitest, B3). The rest of the guide is reference.
+
 ---
 
 ## At a glance
@@ -16,7 +24,7 @@ Written for macOS on Apple Silicon, using the tools already on this machine: **H
 |---|---|---|---|---|
 | React app (Vite) | — | npm | **5173** | `package.json` |
 | Node gateway | Node **24 LTS**, Express 5 | fnm | **4000** | `.node-version` (repo root) |
-| Reviews service | Ruby **3.4.12**, Rails **8.x**, Grape 2.x | asdf | **4001** | `.tool-versions` (repo root) |
+| Reviews service | Ruby **3.4.12**, Rails **8.1**, Grape **4.x** | asdf | **4001** | `.tool-versions` (repo root) |
 | Postgres | **17** | Docker Compose | **5432** | `docker-compose.yml` |
 
 **Databases** (all on the one Postgres container):
@@ -43,10 +51,13 @@ Postgres user/password in dev is `postgres` / `postgres`. These are local-only c
 ```sh
 fnm install 24
 cd ~/code/interviewing/book-shelf-react
-echo "24" > .node-version     # pins the whole repo (frontend + server)
+echo "24" > .node-version     # pins the repo root (frontend)
+echo "24" > server/.node-version
 fnm use                       # → Using Node v24.x
 node -v
 ```
+
+> **Why the second file?** This machine sets `FNM_VERSION_FILE_STRATEGY=local`, which means fnm only reads `.node-version` from the **current** directory, not parent directories. Without its own copy, `cd server` wouldn't switch to Node 24. (asdf does search parent directories, so the one root `.tool-versions` covers `services/reviews/`.)
 
 To have fnm switch versions automatically when you `cd`, check that your shell init has `--use-on-cd`:
 
@@ -368,7 +379,7 @@ The defaults point at the Docker Postgres for local dev. In B7, compose sets `DB
 
 ```sh
 bin/rails db:prepare                 # creates reviews_development + reviews_test, runs migrations
-bin/rails s -p 4001                  # Rails' default is 3000; this project uses 4001
+bin/dev                              # = bin/rails server -p 4001 (Rails' default is 3000)
 curl -i localhost:4001/up            # Rails 8 built-in health check → 200
 bin/rails zeitwerk:check             # run after you add app/api (see the B4 hint)
 bundle exec rspec
@@ -388,7 +399,7 @@ docker compose up -d
 cd server && npm run dev
 
 # tab 3 — Reviews service (:4001), from B4 on
-cd services/reviews && bin/rails s -p 4001
+cd services/reviews && bin/dev
 
 # tab 4 — React app (:5173)
 npm run dev
@@ -401,7 +412,7 @@ npm i -D concurrently
 ```
 
 ```json
-"dev:all": "concurrently -k -n web,api,reviews -c cyan,green,magenta \"npm run dev\" \"npm --prefix server run dev\" \"cd services/reviews && bin/rails s -p 4001\""
+"dev:all": "concurrently -k -n web,api,reviews -c cyan,green,magenta \"npm run dev\" \"npm --prefix server run dev\" \"cd services/reviews && bin/dev\""
 ```
 
 After B7 (everything in Compose):

@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+# This project runs the Reviews service on :4001 (the Node gateway uses :4000).
+# Any -p you pass on the command line still wins, because it comes later in ARGV.
+exec "./bin/rails", "server", "-p", ENV.fetch("PORT", "4001"), *ARGV
