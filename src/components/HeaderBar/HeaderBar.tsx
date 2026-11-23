@@ -25,7 +25,7 @@ export const HeaderBar = () => {
   return (
     <div className="flex content-center">
       <div className="flex-none">📚 Book Shelf</div>
-      <div className="flex-1 flex justify-center">
+      <div className="flex-1 flex justify-center gap-4">
         <HeaderButton isActive={true}>
           My Shelf
         </HeaderButton>

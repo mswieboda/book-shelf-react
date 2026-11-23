@@ -2,7 +2,7 @@ export type ShelfBook = {
   key: string
   title: string
   author: string
-  coverId: number
+  coverId: number | null
   publishYear: number
   status: ReadingStatus
 }

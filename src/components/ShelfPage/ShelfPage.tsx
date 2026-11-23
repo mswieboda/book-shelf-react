@@ -27,7 +27,7 @@ const SortSelect = ({sort, onChange, className}: SortSelectProps) => {
 
 export const ShelfPage = () => {
   const [books, setBooks] = useState(shelfBooks)
-  const [filter, setFilter] = useState<FilterStatus>('want')
+  const [filter, setFilter] = useState<FilterStatus>('all')
   const [sort, setSort] = useState<SortOrder>('newest')
 
   const visibleBooks = sortBooks(filterBooks(books, filter), sort)
@@ -35,7 +35,7 @@ export const ShelfPage = () => {
 
   return (
     <div>
-      <div className="flex justify-center">
+      <div className="flex justify-center mt-4">
         <div className="flex-1 flex justify-center">
           <FilterBar books={books} filter={filter} onFilterChange={setFilter} />
           <SortSelect key="sort" sort={sort} onChange={onSortChange} className="flex-1" />

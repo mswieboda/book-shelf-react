@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import {
   type FilterStatus,
   type ShelfBook,
@@ -20,22 +21,23 @@ export const FilterBar = ({ books, filter, onFilterChange }: FilterBarProps) => 
   }
 
   return (
-    <>
+    <div className="flex-4 flex gap-4 mr-4">
       {Object.entries(FILTER_STATUS_LABELS).map(([status, label]) => {
         const onClick = () => onFilterSelected(status as FilterStatus)
         const count = filterBooks(books, status as FilterStatus).length
 
         return (
-          <BaseButton
-            key={status}
-            isActive={status === filter}
-            className="flex-1"
-            onClick={onClick}
-          >
-            {`${label} (${count})`}
-          </BaseButton>
+          <Fragment key={status}>
+            <BaseButton
+              isActive={status === filter}
+              className="flex-1"
+              onClick={onClick}
+            >
+              {`${label} (${count})`}
+            </BaseButton>
+          </Fragment>
         )
       })}
-    </>
+    </div>
   )
 }

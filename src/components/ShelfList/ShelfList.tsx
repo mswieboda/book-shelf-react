@@ -9,7 +9,10 @@ type ShelfListProps = {
 
 export const ShelfList = ({ books, onUpdateStatus, onRemove }: ShelfListProps) => {
   return (
-    <div>
+    <div className="mt-4">
+      {books.length === 0 && (
+        <ShelfListEmpty />
+      )}
       {books.map(book =>
         <ShelfItem
           key={book.key}
@@ -21,3 +24,8 @@ export const ShelfList = ({ books, onUpdateStatus, onRemove }: ShelfListProps) =
     </div>
   )
 }
+
+const ShelfListEmpty = () =>
+  <div className="text-md text-center">
+    No books here...
+  </div>

@@ -41,4 +41,12 @@ export const shelfBooks: ShelfBook[] = [
     publishYear: 2020,
     status: 'want',
   },
+  {
+    key: '/works/OL555666999',
+    title: 'Some Unknown Book',
+    author: 'John Doe',
+    coverId: null,
+    publishYear: 1975,
+    status: 'want',
+  },
 ]
