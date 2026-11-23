@@ -1,11 +1,27 @@
 export type ShelfBook = {
-  key: string
+  id: string
+  workKey: string
+  title: string
+  author: string
+  coverId: number | null
+  publishYear: number
+  status: ReadingStatus
+  rating?: number | null
+  notes?: string
+  addedAt?: string
+  updatedAt?: string
+}
+
+export type AddShelfBook = {
+  workKey: string
   title: string
   author: string
   coverId: number | null
   publishYear: number
   status: ReadingStatus
 }
+
+export type UpdateBookData = 'status' | 'rating' | 'notes'
 
 // reading
 export const READING_STATUSES = ['want', 'reading', 'done'] as const

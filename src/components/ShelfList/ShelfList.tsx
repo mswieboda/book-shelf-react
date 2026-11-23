@@ -3,8 +3,8 @@ import { ShelfItem } from '@/components/ShelfItem'
 
 type ShelfListProps = {
   books: ShelfBook[],
-  onUpdateStatus: (key: string, newStatus: ReadingStatus) => void
-  onRemove: (key: string) => void
+  onUpdateStatus: (id: string, newStatus: ReadingStatus) => void
+  onRemove: (id: string) => void
 }
 
 export const ShelfList = ({ books, onUpdateStatus, onRemove }: ShelfListProps) => {
@@ -15,7 +15,7 @@ export const ShelfList = ({ books, onUpdateStatus, onRemove }: ShelfListProps) =
       )}
       {books.map(book =>
         <ShelfItem
-          key={book.key}
+          key={book.id}
           book={book}
           onUpdateStatus={onUpdateStatus}
           onRemove={onRemove}

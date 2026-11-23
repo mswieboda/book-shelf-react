@@ -3,15 +3,15 @@ import { BaseButton } from '@/components/BaseButton'
 
 type ShelfItemProps = {
   book: ShelfBook,
-  onUpdateStatus: (key: string, newStatus: ReadingStatus) => void
-  onRemove: (key: string) => void
+  onUpdateStatus: (id: string, newStatus: ReadingStatus) => void
+  onRemove: (id: string) => void
 }
 
 export const ShelfItem = ({ book, onUpdateStatus, onRemove }: ShelfItemProps) => {
-  const {key, title, author, coverId, publishYear, status} = book
+  const {id, title, author, coverId, publishYear, status} = book
 
-  const onChangeStatus = (newStatus: string) => onUpdateStatus(key, newStatus as ReadingStatus)
-  const onRemoveClick = () => onRemove(key)
+  const onChangeStatus = (newStatus: string) => onUpdateStatus(id, newStatus as ReadingStatus)
+  const onRemoveClick = () => onRemove(id)
 
   return (
     <div className="flex my-4 p-4 rounded-md bg-mauve-900">

@@ -181,6 +181,7 @@ Add a **Search** section. Put it above the shelf, or toggle between them with a 
 - [ ] A `useSearch(query)` hook using the same `useEffect` + abort pattern as M3 (copy-paste it; the duplication is part of the lesson).
 - [ ] Each result has **+ Add**, which calls `addBook()`. Show `409` ("already on your shelf") nicely. Disable the button while the request is in flight.
 - [ ] Results already on your shelf show "✓ On shelf" instead of the button.
+- [ ] **Carried over from M2:** make `ShelfBook.publishYear` (and `AddShelfBook.publishYear`) `number | null`. The server already stores `null` when a search result has no year (Open Library's `first_publish_year` can be missing). Then fix what the compiler flags: sorting/display in the shelf UI need to handle a missing year.
 
 **Concepts:** debouncing with effect cleanup (`setTimeout` / `clearTimeout`), mapping external data at the boundary, handling a `409`.
 

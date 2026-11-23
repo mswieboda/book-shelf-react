@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import * as shelfApi from '@/app/shelf/api'
+
+// Dev-only: poke the API layer from the browser console, e.g. `await shelfApi.getShelf('reading')`.
+if (import.meta.env.DEV) Object.assign(window, { shelfApi })
 
 // Start the fake backend (MSW) before the app renders, in dev only.
 // Requests to /api/* are answered by src/mocks/handlers.ts; everything else

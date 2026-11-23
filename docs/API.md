@@ -20,9 +20,9 @@ interface ShelfBook {
   id: string                    // uuid, assigned by the server
   workKey: string               // Open Library work key, e.g. "/works/OL893414W" (unique per shelf)
   title: string
-  authors: string[]
+  author: string                // single author (simplified; Open Library returns an array)
   coverId: number | null        // Open Library cover id (see "Covers" below)
-  firstPublishYear: number | null
+  publishYear: number | null
   status: ReadingStatus
   rating: number | null         // integer 1–5, or null
   notes: string                 // max 1000 chars
@@ -44,7 +44,7 @@ interface ApiErrorBody { error: string }
 | `GET` | `/api/shelf` | none | `200 ShelfBook[]`, newest first | `400` bad `status` |
 | `GET` | `/api/shelf?status=reading` | none | `200 ShelfBook[]`, filtered | `400` |
 | `GET` | `/api/shelf/:id` | none | `200 ShelfBook` | `404` |
-| `POST` | `/api/shelf` | `{ workKey, title, authors?, coverId?, firstPublishYear?, status? }` | `201 ShelfBook` (status defaults to `want`) | `400` missing fields, `409` already on shelf |
+| `POST` | `/api/shelf` | `{ workKey, title, author?, coverId?, publishYear?, status? }` | `201 ShelfBook` (status defaults to `want`) | `400` missing fields, `409` already on shelf |
 | `PATCH` | `/api/shelf/:id` | any of `{ status?, rating?, notes? }` | `200 ShelfBook` | `400` validation, `404` |
 | `DELETE` | `/api/shelf/:id` | none | `204` empty body | `404` |
 | `POST` | `/api/_reset` | none | `200 ShelfBook[]` | dev helper: restores the seed data |
@@ -110,7 +110,7 @@ Any field except `key` and `title` can be missing. Your types should say so.
 
 Notes:
 - Open Library is a free service and is sometimes slow (1–3s), which makes it good practice for loading states. Don't send a request on every keystroke (see Milestone 4).
-- Don't pass Open Library's response shape around your app. Map it into your own type at the edge, e.g. `author_name` → `authors`, `cover_i` → `coverId`, `key` → `workKey`. Then a change in their API breaks one function instead of twenty components.
+- Don't pass Open Library's response shape around your app. Map it into your own type at the edge, e.g. `author_name[0]` → `author`, `cover_i` → `coverId`, `key` → `workKey`. Then a change in their API breaks one function instead of twenty components.
 
 ### Covers
 

@@ -22,9 +22,9 @@ export const sortBooks = (books: ShelfBook[], sort: SortOrder) => {
   return books.toSorted((a, b) => a.title.localeCompare(b.title))
 }
 
-export const updateBookStatus = (key: string, status: ReadingStatus, books: ShelfBook[]) =>
-  books.map(b => b.key === key ? {...b, status: status } : b)
+export const updateBookStatus = (id: string, status: ReadingStatus, books: ShelfBook[]) =>
+  books.map(b => b.id === id ? {...b, status: status } : b)
 
 // Pure: returns a NEW array without the book; never touches the input.
-export const removeBook = (key: string, books: ShelfBook[]): ShelfBook[] =>
-  books.filter((b) => b.key !== key)
+export const removeBook = (id: string, books: ShelfBook[]): ShelfBook[] =>
+  books.filter((b) => b.id !== id)

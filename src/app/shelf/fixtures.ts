@@ -2,7 +2,8 @@ import { type ShelfBook } from '@/app/shelf/types'
 
 export const shelfBooks: ShelfBook[] = [
   {
-    key: '/works/OL15692462W',
+    id: 'asdf34234d',
+    workKey: '/works/OL15692462W',
     title: 'A Song of Ice and Fire (1-4)',
     author: "George R.R. Martin",
     coverId: 11300908,
@@ -10,7 +11,8 @@ export const shelfBooks: ShelfBook[] = [
     status: 'reading',
   },
   {
-    key: '/works/OL893414W',
+    id: '234asdf',
+    workKey: '/works/OL893414W',
     title: 'Dune',
     author: 'Frank Herbert',
     coverId: 11481354,
@@ -18,7 +20,8 @@ export const shelfBooks: ShelfBook[] = [
     status: 'want',
   },
   {
-    key: '/works/OL21745884W',
+    id: '23l4jk234',
+    workKey: '/works/OL21745884W',
     title: 'Project Hail Mary',
     author: 'Andy Weir',
     coverId: 11200092,
@@ -26,7 +29,8 @@ export const shelfBooks: ShelfBook[] = [
     status: 'done',
   },
   {
-    key: '/works/OL5748544W',
+    id: '8349234jklklj',
+    workKey: '/works/OL5748544W',
     title: 'The Pragmatic Programmer',
     author: 'Andrew Hunt',
     coverId: 10143650,
@@ -34,7 +38,8 @@ export const shelfBooks: ShelfBook[] = [
     status: 'want',
   },
   {
-    key: '/works/OL20893680W',
+    id: '2340kl23n4lkj',
+    workKey: '/works/OL20893680W',
     title: 'Piranesi',
     author: 'Susanna Clarke',
     coverId: 10226290,
@@ -42,7 +47,8 @@ export const shelfBooks: ShelfBook[] = [
     status: 'want',
   },
   {
-    key: '/works/OL555666999',
+    id: '123o9234',
+    workKey: '/works/OL555666999',
     title: 'Some Unknown Book',
     author: 'John Doe',
     coverId: null,

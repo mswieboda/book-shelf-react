@@ -12,9 +12,9 @@ export interface ShelfBookRecord {
   id: string
   workKey: string
   title: string
-  authors: string[]
+  author: string
   coverId: number | null
-  firstPublishYear: number | null
+  publishYear: number | null
   status: ReadingStatus
   rating: number | null
   notes: string
@@ -22,7 +22,7 @@ export interface ShelfBookRecord {
   updatedAt: string
 }
 
-const STORAGE_KEY = 'mock:shelf'
+const STORAGE_KEY = 'mock:shelf:v2' // v2: author string + publishYear
 
 function daysAgo(n: number): string {
   return new Date(Date.now() - n * 86_400_000).toISOString()
@@ -33,9 +33,9 @@ function seed(): ShelfBookRecord[] {
     {
       workKey: '/works/OL893414W',
       title: 'Dune',
-      authors: ['Frank Herbert'],
+      author: 'Frank Herbert',
       coverId: 11481354,
-      firstPublishYear: 1965,
+      publishYear: 1965,
       status: 'done' as const,
       rating: 5,
       notes: 'The spice must flow.',
@@ -44,9 +44,9 @@ function seed(): ShelfBookRecord[] {
     {
       workKey: '/works/OL21745884W',
       title: 'Project Hail Mary',
-      authors: ['Andy Weir'],
+      author: 'Andy Weir',
       coverId: 11200092,
-      firstPublishYear: 2021,
+      publishYear: 2021,
       status: 'reading' as const,
       rating: null,
       notes: '',
@@ -55,9 +55,9 @@ function seed(): ShelfBookRecord[] {
     {
       workKey: '/works/OL5748544W',
       title: 'The Pragmatic Programmer',
-      authors: ['Andrew Hunt', 'Dave Thomas'],
+      author: 'Andrew Hunt & Dave Thomas',
       coverId: 10143650,
-      firstPublishYear: 1999,
+      publishYear: 1999,
       status: 'reading' as const,
       rating: null,
       notes: '',
@@ -66,9 +66,9 @@ function seed(): ShelfBookRecord[] {
     {
       workKey: '/works/OL20893680W',
       title: 'Piranesi',
-      authors: ['Susanna Clarke'],
+      author: 'Susanna Clarke',
       coverId: 10226290,
-      firstPublishYear: 2020,
+      publishYear: 2020,
       status: 'want' as const,
       rating: null,
       notes: '',

@@ -44,8 +44,8 @@ export const ShelfPage = () => {
 
       <ShelfList
         books={visibleBooks}
-        onUpdateStatus={(key, newStatus) => setBooks(prev => updateBookStatus(key, newStatus, prev))}
-        onRemove={(key) => setBooks(prev => removeBook(key, prev))}
+        onUpdateStatus={(id, newStatus) => setBooks(prev => updateBookStatus(id, newStatus, prev))}
+        onRemove={(id) => setBooks(prev => removeBook(id, prev))}
       />
     </div>
   )

@@ -2,13 +2,6 @@ import axios, { type InternalAxiosRequestConfig } from 'axios'
 
 export const serverApi = axios.create({ baseURL: '/api', timeout: 10_000 })
 
-// Let TS know about the extra field we stash on each request's config.
-declare module 'axios' {
-  interface InternalAxiosRequestConfig {
-    meta?: { startedAt: number }
-  }
-}
-
 // `config.method` is lowercase ('get'); `config.url` is relative to baseURL ('/shelf').
 // `config.params` holds query params separately (e.g. { status: 'reading' }).
 const describe = (config?: InternalAxiosRequestConfig) =>
@@ -16,10 +9,6 @@ const describe = (config?: InternalAxiosRequestConfig) =>
 
 // --- Request Interceptor ---
 serverApi.interceptors.request.use(config => {
-  // adds stuff to every request beforehand, can add headers, auth here, etc
-  // currently, adds the date/time to `meta: { startedAt: datetime }` etc
-  config.meta = { startedAt: performance.now() }
-
   // console log in DEV
   if (import.meta.env.DEV) console.log('→', describe(config), config.params ?? '')
 
@@ -60,4 +49,4 @@ const toApiError = (error: unknown): ApiError =>  {
   }
 
   return new ApiError('Unknown error', 'UNKNOWN')
-})
+}
