@@ -58,5 +58,5 @@ export const removeBook = (
   const url = `/shelf/${id}`
   const config = { signal: options?.signal }
 
-  return serverApi.delete(url, config).then(_response => undefined)
+  return serverApi.delete(url, config).then(() => undefined)
 }

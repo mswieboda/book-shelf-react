@@ -1,22 +1,9 @@
-import axios, { type InternalAxiosRequestConfig } from 'axios'
+import axios, {
+  type CreateAxiosDefaults,
+  type InternalAxiosRequestConfig,
+} from 'axios'
 
-export const serverApi = axios.create({ baseURL: '/api', timeout: 10_000 })
-
-// `config.method` is lowercase ('get'); `config.url` is relative to baseURL ('/shelf').
-// `config.params` holds query params separately (e.g. { status: 'reading' }).
-const describe = (config?: InternalAxiosRequestConfig) =>
-  `${config?.method?.toUpperCase()} ${config?.url}`
-
-// --- Request Interceptor ---
-serverApi.interceptors.request.use(config => {
-  // console log in DEV
-  if (import.meta.env.DEV) console.log('→', describe(config), config.params ?? '')
-
-  return config // must return the config, or the request is sent with `undefined`
-})
-
-// --- Response Interceptor ---
-
+// --- Error Types / Classes ---
 export type ApiErrorCode = 'TIMEOUT' | 'NETWORK' | 'CANCELED' | 'HTTP' | 'UNKNOWN'
 
 export class ApiError extends Error {
@@ -32,10 +19,11 @@ export class ApiError extends Error {
   }
 }
 
-serverApi.interceptors.response.use(
-  response => response,
-  (error: unknown) => Promise.reject(toApiError(error))
-)
+// --- Interceptor helpers ---
+// `config.method` is lowercase ('get'); `config.url` is relative to baseURL ('/shelf').
+// `config.params` holds query params separately (e.g. { status: 'reading' }).
+const describe = (config?: InternalAxiosRequestConfig) =>
+  `${config?.method?.toUpperCase()} ${config?.url}`
 
 const toApiError = (error: unknown): ApiError =>  {
   if (axios.isCancel(error)) return new ApiError('Request canceled', 'CANCELED')
@@ -50,3 +38,38 @@ const toApiError = (error: unknown): ApiError =>  {
 
   return new ApiError('Unknown error', 'UNKNOWN')
 }
+
+// --- Http Client Factory with Interceptors ---
+export const createHttpClient = (config: CreateAxiosDefaults) => {
+  const instance = axios.create(config)
+
+  // --- Request Interceptor ---
+  instance.interceptors.request.use(config => {
+    // console log in DEV
+    if (import.meta.env.DEV) {
+      const showData = false
+      console.log('→', describe(config), config.params ?? '', showData ? config.data : '')
+    }
+
+    return config // must return the config, or the request is sent with `undefined`
+  })
+
+  // --- Response Interceptor ---
+  instance.interceptors.response.use(
+    response => {
+      // console log in DEV
+      if (import.meta.env.DEV) {
+        const showData = false
+        console.log('←', describe(response.config), showData ? response.data : '')
+      }
+
+      return response
+    },
+    (error: unknown) => Promise.reject(toApiError(error))
+  )
+
+  return instance
+}
+
+// --- Server API client ---
+export const serverApi = createHttpClient({ baseURL: '/api', timeout: 10_000 })
